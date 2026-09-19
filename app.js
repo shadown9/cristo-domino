@@ -6,24 +6,43 @@ var LS_KEY = 'cristo_domino_v1';
 var TEAM_COLORS = ['#ffffff', '#2f9df0', '#ff5c5c', '#34c77b', '#ffb020', '#b16dff'];
 var METAS = [100, 200, 300, 500];
 
-/* ---------- Pullas (contenido sano, para amigos de la iglesia) ---------- */
+/* ---------- Pullas (contenido sano, para amigos de la iglesia) ----------
+   3 niveles por porcentaje de la meta; cada equipo desbloquea por sus
+   propios puntos y todo queda desbloqueado antes de terminar la partida. */
 var PULLAS = {
-  basicas: [
-    { id: 'risa',     emoji: '😂', titulo: 'Risa buena',            sonido: 'risa' },
-    { id: 'corona',   emoji: '👑', titulo: 'Rey del dominó',        sonido: 'corona' },
-    { id: 'rayo',     emoji: '⚡', titulo: 'Más rápido que el tren', sonido: 'rayo' },
-    { id: 'tortuga',  emoji: '🐢', titulo: 'Sin prisa, con calma',  sonido: 'tortuga' },
-    { id: 'trompeta', emoji: '🎺', titulo: 'Suena la victoria',     sonido: 'trompeta' },
-    { id: 'estrella', emoji: '⭐', titulo: 'Brilla, brilla',        sonido: 'estrella' },
-    { id: 'burro',    emoji: '🫏', titulo: 'Burro',                 sonido: 'burro' }
+  nivel1: [
+    { id: 'risa',    emoji: '😂', titulo: 'Risa buena',           sonido: 'risa' },
+    { id: 'tortuga', emoji: '🐢', titulo: 'Sin prisa, con calma', sonido: 'tortuga' },
+    { id: 'burro',   emoji: '🫏', titulo: 'Burro',                 sonido: 'burro' }
   ],
-  epicas: [
+  nivel2: [
+    { id: 'trompeta', emoji: '🎺', titulo: 'Suena la victoria',      sonido: 'trompeta' },
+    { id: 'rayo',     emoji: '⚡', titulo: 'Más rápido que el tren', sonido: 'rayo' },
+    { id: 'estrella', emoji: '⭐', titulo: 'Brilla, brilla',         sonido: 'estrella' }
+  ],
+  nivel3: [
+    { id: 'corona',  emoji: '👑', titulo: 'Rey del dominó',       sonido: 'corona' },
     { id: 'copa',    emoji: '🏆', titulo: 'Campeón con humildad', sonido: 'copa' },
     { id: 'fiesta',  emoji: '🎆', titulo: 'Fiesta sana',          sonido: 'fiesta' },
     { id: 'aleluya', emoji: '🙌', titulo: 'Gloria a Dios',       sonido: 'aleluya' }
   ]
 };
-var GROUP_NAMES = { basicas: 'Básicas', epicas: 'Épicas' };
+var NIVELES = [
+  { id: 'nivel1', nombre: 'Nivel 1', pct: 15 },
+  { id: 'nivel2', nombre: 'Nivel 2', pct: 50 },
+  { id: 'nivel3', nombre: 'Épicas',  pct: 80 }
+];
+function umbralNivel(i) { return Math.ceil(state.meta * NIVELES[i].pct / 100); }
+/* Nivel actual de un equipo (0..3) según su puntaje. */
+function nivelDeEquipo(t) {
+  var s = state.teams[t].score, n = 0;
+  for (var i = 0; i < NIVELES.length; i++) if (s >= umbralNivel(i)) n = i + 1;
+  return n;
+}
+function nombreNivel(id) {
+  for (var i = 0; i < NIVELES.length; i++) if (NIVELES[i].id === id) return NIVELES[i].nombre;
+  return id;
+}
 
 /* ---------- Estado ---------- */
 function defaultState() {
@@ -35,10 +54,9 @@ function defaultState() {
     meta: 100,
     selected: 1,
     entry: '0',
-    hands: [],        // {team, points, ts, unlockedBasic}
+    hands: [],        // {team, points, ts}
     history: [],      // {n, fecha, meta, ganador, hands}
     gameN: 1,
-    pullas: { 0: [], 1: [] },   // grupos desbloqueados por equipo: 'basicas' | 'epicas'
     theme: 'dark'
   };
 }
@@ -53,7 +71,7 @@ function load() {
     if (!s || !s.teams || s.teams.length !== 2) return;
     var d = defaultState();
     state = Object.assign(d, s);
-    state.pullas = s.pullas && s.pullas[0] ? s.pullas : { 0: [], 1: [] };
+    delete state.pullas; // sistema viejo de desbloqueo: ahora es por nivel según puntaje
   } catch (e) { /* estado fresco si algo falla */ }
 }
 function save() {
@@ -431,6 +449,13 @@ function renderCards() {
     gift.classList.toggle('unlocked', activo);
     gift.classList.toggle('locked', !activo);
     gift.setAttribute('aria-label', 'Pullas de ' + team.name);
+    // El regalo muestra el nivel de pullas desbloqueado por el equipo.
+    var nv = nivelDeEquipo(i);
+    var badge = $('giftLvl' + i);
+    if (badge) {
+      badge.textContent = nv > 0 ? nv : '';
+      badge.hidden = nv === 0;
+    }
   }
   $('panelTitle').textContent = 'Puntos para ' + state.teams[state.selected].name;
 }
@@ -554,17 +579,19 @@ function sumarPuntos() {
     return;
   }
   var t = state.selected;
+  var nivelAntes = nivelDeEquipo(t);
   state.teams[t].score += pts;
   state.teams[t].dominadas += 1;
-  var hand = { team: t, points: pts, ts: Date.now(), unlockedBasic: false };
+  var hand = { team: t, points: pts, ts: Date.now() };
   state.hands.push(hand);
   SFX.sumar();
 
-  if (pts >= 25 && state.pullas[t].indexOf('basicas') === -1) {
-    state.pullas[t].push('basicas');
-    hand.unlockedBasic = true;
+  var nivelDespues = nivelDeEquipo(t);
+  if (nivelDespues > nivelAntes) {
     SFX.unlock();
-    toast('¡' + state.teams[t].name + ' desbloqueó las pullas básicas! 🎁');
+    var nomN = NIVELES[nivelDespues - 1].nombre;
+    toast('¡' + state.teams[t].name + ' desbloqueó ' +
+          (nivelDespues === 3 ? 'las pullas épicas' : 'el ' + nomN) + '! 🎁');
   }
 
   state.entry = '0';
@@ -577,16 +604,10 @@ function sumarPuntos() {
 function revisarGanador() {
   var t = state.selected;
   if (state.teams[t].score < state.meta) return;
-  var epicNueva = false;
-  if (state.pullas[t].indexOf('epicas') === -1) {
-    state.pullas[t].push('epicas');
-    epicNueva = true;
-  }
   SFX.fanfarria();
   confetti(displayColor(state.teams[t]));
   $('winnerTitle').textContent = '¡' + state.teams[t].name + ' ganó la partida!';
   $('winnerSub').textContent = 'Meta ' + state.meta + ' · ' + state.teams[t].score + ' puntos';
-  $('winnerUnlock').hidden = !epicNueva;
   $('winnerBackdrop').hidden = false;
   document.body.classList.add('modal-open');
   save();
@@ -631,12 +652,6 @@ function deshacerUltima() {
   var team = state.teams[h.team];
   team.score = Math.max(0, team.score - h.points);
   team.dominadas = Math.max(0, team.dominadas - 1);
-  if (h.unlockedBasic) {
-    var aun = state.hands.some(function (x) { return x.team === h.team && x.points >= 25; });
-    if (!aun) {
-      state.pullas[h.team] = state.pullas[h.team].filter(function (g) { return g !== 'basicas'; });
-    }
-  }
   SFX.deshacer();
   save();
   render();
@@ -736,37 +751,47 @@ function elegirMeta(m) {
 
 /* ---------- Pullas ---------- */
 function abrirPullas(team) {
-  var grupos = state.pullas[team];
-  if (!grupos.length) {
-    toast('Gana una mano de 25+ puntos para desbloquear pullas 🎁');
+  var nivel = nivelDeEquipo(team);
+  if (nivel === 0) {
+    var falta = umbralNivel(0) - state.teams[team].score;
+    toast('Alcanza ' + umbralNivel(0) + ' pts (te faltan ' + falta + ') para desbloquear pullas 🎁');
     return;
   }
   ensureAudio();
   $('pullaTitle').textContent = 'Pullas de ' + state.teams[team].name;
   var cont = $('pullaGroups');
   cont.innerHTML = '';
-  grupos.forEach(function (g) {
-    var sec = document.createElement('div');
-    var h = document.createElement('p');
-    h.className = 'pulla-sec-title';
-    h.textContent = GROUP_NAMES[g] || g;
-    sec.appendChild(h);
-    var row = document.createElement('div');
-    row.className = 'pulla-row';
-    PULLAS[g].forEach(function (p) {
-      var b = document.createElement('button');
-      b.className = 'pulla-item';
-      b.innerHTML = '<span class="pulla-emoji">' + p.emoji + '</span>' +
-                    '<span class="pulla-name">' + esc(p.titulo) + '</span>';
-      b.addEventListener('click', function () { enviarPulla(team, p); });
-      row.appendChild(b);
-    });
-    sec.appendChild(row);
-    cont.appendChild(sec);
-  });
+  for (var i = 0; i < nivel; i++) {
+    (function (ni) {
+      var id = NIVELES[ni].id;
+      var sec = document.createElement('div');
+      var h = document.createElement('p');
+      h.className = 'pulla-sec-title';
+      h.textContent = NIVELES[ni].nombre;
+      sec.appendChild(h);
+      var row = document.createElement('div');
+      row.className = 'pulla-row';
+      PULLAS[id].forEach(function (p) {
+        var b = document.createElement('button');
+        b.className = 'pulla-item';
+        b.innerHTML = '<span class="pulla-emoji">' + p.emoji + '</span>' +
+                      '<span class="pulla-name">' + esc(p.titulo) + '</span>';
+        b.addEventListener('click', function () { enviarPulla(team, p); });
+        row.appendChild(b);
+      });
+      sec.appendChild(row);
+      cont.appendChild(sec);
+    })(i);
+  }
   var hint = document.createElement('p');
   hint.className = 'pulla-hint';
-  hint.textContent = 'Toca una pulla para enviársela al otro equipo 😄';
+  if (nivel < NIVELES.length) {
+    var sig = NIVELES[nivel];
+    hint.textContent = 'Te faltan ' + (umbralNivel(nivel) - state.teams[team].score) +
+      ' pts para ' + (nivel === 2 ? 'las pullas épicas' : 'el ' + sig.nombre) + ' 😄';
+  } else {
+    hint.textContent = 'Toca una pulla para enviársela al otro equipo 😄';
+  }
   cont.appendChild(hint);
   $('pullaBackdrop').hidden = false;
   document.body.classList.add('modal-open');
@@ -1268,7 +1293,7 @@ function recibirMensajeInvitado(m) {
 }
 
 function buscarPullaPorId(id) {
-  var grupos = ['basicas', 'epicas'];
+  var grupos = ['nivel1', 'nivel2', 'nivel3'];
   for (var g = 0; g < grupos.length; g++) {
     var arr = PULLAS[grupos[g]];
     for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i];

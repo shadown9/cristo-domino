@@ -159,6 +159,12 @@ body.modal-open{overflow:hidden;}
 #gift1{right:8px;}
 .gift.locked{filter:grayscale(1);opacity:.35;}
 .gift.unlocked{filter:none;opacity:1;animation:giftGlow 2.4s ease-in-out infinite;}
+.gift-lvl{
+  position:absolute;top:0;right:0;
+  min-width:18px;height:18px;line-height:18px;
+  border-radius:9px;background:var(--accent);color:#fff;
+  font-size:11px;font-weight:700;text-align:center;padding:0 4px;
+}
 @keyframes giftGlow{
   0%,100%{transform:scale(1);}
   50%{transform:scale(1.12);}
@@ -412,7 +418,7 @@ body.modal-open{overflow:hidden;}
 .winner-emoji{font-size:64px;}
 .winner-card h3{margin:12px 0 6px;font-size:23px;}
 .winner-card p{color:var(--muted);margin:6px 0;}
-.winner-unlock{color:var(--accent);font-weight:700;}
+.winner-sub{opacity:.85;}
 .winner-card .sum-btn{margin-top:16px;}
 
 /* ---------- Pulla enviada ---------- */
