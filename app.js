@@ -1045,10 +1045,14 @@ function brokerDeURL() {
    cbs = { abierto(cliente), mensaje(topico, obj), cerrado(motivo) }
    cliente = { publicar(topico, obj), cerrar() } */
 function mqttConectar(topicoSub, cbs, brokerPreferido) {
+  // Si hay broker preferido (fijado en el enlace), se usa SOLO ese: anfitrión e
+  // invitado siempre quedan en el mismo servidor. Sin preferido, se prueban en orden.
   var orden = [];
-  for (var bi = 0; bi < MQTT_BROKERS.length; bi++) orden.push(bi);
-  if (brokerPreferido != null && brokerPreferido >= 0 && brokerPreferido < MQTT_BROKERS.length) {
-    orden = [brokerPreferido].concat(orden.filter(function (x) { return x !== brokerPreferido; }));
+  var estricto = brokerPreferido != null && brokerPreferido >= 0 && brokerPreferido < MQTT_BROKERS.length;
+  if (estricto) {
+    orden = [brokerPreferido];
+  } else {
+    for (var bi = 0; bi < MQTT_BROKERS.length; bi++) orden.push(bi);
   }
   var oi = 0, ws = null, pingTimer = null, cerradoVoluntario = false;
   var cliente = {
@@ -1155,14 +1159,14 @@ function cbsSala(registro) {
     cerrado: function (motivo) {
       if (salaPendiente === registro) {
         salaPendiente = null;
-        if (motivo === 'sin-broker') toast('Sin conexión: no se pudo compartir la partida');
+        if (motivo === 'sin-broker' && !registro.silencioso) toast('Sin conexión: no se pudo compartir la partida');
         return;
       }
       if (salaActiva === registro) {
         if (motivo === 'desconectado' && registro.intentos < 3) {
           registro.intentos++;
           setTimeout(function () {
-            if (salaActiva === registro) registro.mqtt = mqttConectar(null, cbsSala(registro));
+            if (salaActiva === registro) registro.mqtt = mqttConectar(null, cbsSala(registro), registro.broker);
           }, 4000);
         } else {
           detenerSala();
@@ -1197,7 +1201,7 @@ function asegurarSala() {
   salaActiva.intentos = 0;
   salaActiva.silencioso = true;
   salaPendiente = salaActiva;
-  salaActiva.mqtt = mqttConectar(null, cbsSala(salaActiva));
+  salaActiva.mqtt = mqttConectar(null, cbsSala(salaActiva), salaActiva.broker);
 }
 document.addEventListener('visibilitychange', function () {
   if (!document.hidden) asegurarSala();
@@ -1251,6 +1255,7 @@ var MODO_ESPECTADOR = false;
 var codigoSalaInvitado = null;
 var mqttInvitado = null;
 var invitadoTimer = null;
+var invitadoPrimerIntento = 0;
 var invitadoEstado = false;
 var invitadoFin = false;
 
@@ -1268,6 +1273,7 @@ function iniciarEspectador(codigo) {
 
 function conectarInvitado() {
   if (!MODO_ESPECTADOR || invitadoFin) return;
+  if (!invitadoPrimerIntento) invitadoPrimerIntento = Date.now();
   var topico = MQTT_TOPICO_BASE + codigoSalaInvitado;
   try {
     mqttInvitado = mqttConectar(topico, {
@@ -1285,6 +1291,9 @@ function conectarInvitado() {
       cerrado: function () {
         if (!MODO_ESPECTADOR || invitadoFin) return;
         clearTimeout(invitadoTimer);
+        if (!invitadoEstado && Date.now() - invitadoPrimerIntento > 30000) {
+          $('spectWait').textContent = 'No se pudo conectar con la partida. Revisa tu conexión o pide un enlace nuevo…';
+        }
         invitadoTimer = setTimeout(conectarInvitado, 5000);
       }
     }, brokerDeURL());
