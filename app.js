@@ -500,7 +500,7 @@ function histMatchHTML(n, meta, winnerName, hands, nombres, colorIdx, enCurso) {
           (enCurso ? 'en curso' : 'Ganó ' + esc(winnerName)) + '</span></div>';
   html += '<div class="hist-cols">';
   for (var i = 0; i < 2; i++) {
-    html += '<div class="hist-col"><div class="hist-col-head"><span class="hist-team">' +
+    html += '<div class="hist-col"><div class="hist-col-head"><span class="hist-team" style="color:' + histColor(colorIdx[i]) + '">' +
             esc(nombres[i]) + '</span><span class="hist-total">' +
             teamTotalHist(hands, i) + ' pts</span></div>';
     var rows = [];
