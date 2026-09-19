@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0e">
+<meta name="description" content="Cristo Domino — anotador de dominó. Más que un juego.">
+<title>Cristo Domino — Anotador de dominó</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" href="icons/favicon.ico">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<button id="themeToggle" class="theme-toggle" aria-label="Cambiar modo claro u oscuro">☀️</button>
+
+<header class="header">
+  <img class="logo" src="icons/icon-192.png" alt="Símbolo de Cristo Domino">
+  <h1>CRISTO DOMINO</h1>
+  <p class="motto">MÁS QUE UN JUEGO</p>
+</header>
+
+<main class="wrap">
+
+  <!-- Cuadros de puntaje -->
+  <section class="scores" aria-label="Puntajes">
+    <div class="score-card" data-team="0" id="card0">
+      <div class="score-num" id="num0" title="Toca para cambiar el color">0</div>
+      <div class="score-name" id="name0" title="Toca para editar el nombre">Equipo 1</div>
+      <div class="target-hint">Anotar aquí</div>
+      <div class="dominadas"><span id="dom0">0</span> dominadas</div>
+      <div class="team-indicator"></div>
+      <button class="gift locked" id="gift0" data-team="0" aria-label="Pullas del Equipo 1">🎁</button>
+    </div>
+    <div class="score-card" data-team="1" id="card1">
+      <div class="score-num" id="num1" title="Toca para cambiar el color">0</div>
+      <div class="score-name" id="name1" title="Toca para editar el nombre">Equipo 2</div>
+      <div class="target-hint">Anotar aquí</div>
+      <div class="dominadas"><span id="dom1">0</span> dominadas</div>
+      <div class="team-indicator"></div>
+      <button class="gift locked" id="gift1" data-team="1" aria-label="Pullas del Equipo 2">🎁</button>
+    </div>
+  </section>
+  <button id="resetDomBtn" class="link-btn center">Reiniciar dominadas</button>
+
+  <!-- Selector de meta -->
+  <section class="meta-row" aria-label="Meta de puntos">
+    <span class="meta-label">Meta</span>
+    <div class="meta-seg" id="metaSeg" role="group" aria-label="Elegir meta">
+      <button data-meta="100">100</button>
+      <button data-meta="200">200</button>
+      <button data-meta="300">300</button>
+      <button data-meta="500">500</button>
+    </div>
+  </section>
+
+  <!-- Panel de puntos -->
+  <section class="panel" aria-label="Anotar puntos">
+    <div class="panel-top">
+      <span class="panel-title" id="panelTitle">Puntos para Equipo 2</span>
+      <span class="entry" id="entryDisplay">0</span>
+    </div>
+    <button class="sum-btn" id="sumBtn">Sumar puntos</button>
+  </section>
+
+  <!-- Teclado -->
+  <section class="keypad" aria-label="Teclado numérico">
+    <button data-key="1">1</button>
+    <button data-key="2">2</button>
+    <button data-key="3">3</button>
+    <button data-key="4">4</button>
+    <button data-key="5">5</button>
+    <button data-key="6">6</button>
+    <button data-key="7">7</button>
+    <button data-key="8">8</button>
+    <button data-key="9">9</button>
+    <button data-key="clear" class="accent-text">Borrar</button>
+    <button data-key="0">0</button>
+    <button data-key="back" class="accent-text" aria-label="Borrar un dígito">⌫</button>
+  </section>
+
+  <!-- Historial -->
+  <section class="history" aria-label="Historial">
+    <div class="history-head">
+      <h2>Historial</h2>
+      <div class="history-actions">
+        <button id="newGameBtn" class="link-btn">Partida nueva</button>
+        <button id="undoBtn" class="link-btn">Deshacer última</button>
+      </div>
+    </div>
+    <div id="historyBody"></div>
+    <button id="clearHistoryBtn" class="discreet">Borrar historial</button>
+  </section>
+
+</main>
+
+<!-- Modal de pullas -->
+<div class="modal-backdrop" id="pullaBackdrop" hidden>
+  <div class="pulla-sheet" role="dialog" aria-modal="true" aria-labelledby="pullaTitle">
+    <button class="sheet-close" id="pullaClose" aria-label="Cerrar">✕</button>
+    <h3 id="pullaTitle">Pullas</h3>
+    <div id="pullaGroups"></div>
+  </div>
+</div>
+
+<!-- Aviso de ganador -->
+<div class="modal-backdrop" id="winnerBackdrop" hidden>
+  <div class="winner-card" role="alertdialog" aria-modal="true">
+    <div class="winner-emoji">🏆</div>
+    <h3 id="winnerTitle">¡Equipo 2 ganó la partida!</h3>
+    <p id="winnerSub"></p>
+    <p id="winnerUnlock" class="winner-unlock" hidden>¡Pullas épicas desbloqueadas! 🎆</p>
+    <button class="sum-btn" id="winnerOk">Aceptar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<script src="app.js"></script>
+</body>
+</html>
