@@ -14,7 +14,8 @@ var PULLAS = {
     { id: 'rayo',     emoji: '⚡', titulo: 'Más rápido que el tren', sonido: 'rayo' },
     { id: 'tortuga',  emoji: '🐢', titulo: 'Sin prisa, con calma',  sonido: 'tortuga' },
     { id: 'trompeta', emoji: '🎺', titulo: 'Suena la victoria',     sonido: 'trompeta' },
-    { id: 'estrella', emoji: '⭐', titulo: 'Brilla, brilla',        sonido: 'estrella' }
+    { id: 'estrella', emoji: '⭐', titulo: 'Brilla, brilla',        sonido: 'estrella' },
+    { id: 'burro',    emoji: '🫏', titulo: 'Burro',                 sonido: 'burro' }
   ],
   epicas: [
     { id: 'copa',    emoji: '🏆', titulo: 'Campeón con humildad', sonido: 'copa' },
@@ -289,11 +290,34 @@ var PULLA_SFX = {
     noiseHit(t, 0.1, 'highpass', 2800, 0.8, 0.3);
   },
   tortuga: function () {
-    // Lenta y grave: tres notas bajas descendentes
+    // Pesada y perezosa: notas graves con bamboleo lento + pisadas sordas.
     if (!AC) return;
     var t = AC.currentTime + 0.02;
-    [[196, 0], [174, 0.34], [147, 0.68]]
-      .forEach(function (n) { softNote(n[0], t + n[1], 0.34, 'sine', 0.42); });
+    [[147, 0], [130.8, 0.42], [110, 0.84]].forEach(function (n) {
+      var t0 = t + n[1];
+      // Nota grave con vibrato muy lento (el bamboleo de la tortuga)
+      var o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = n[0];
+      var lfo = AC.createOscillator(); lfo.frequency.value = 2.2;
+      var lg = AC.createGain(); lg.gain.value = n[0] * 0.03;
+      lfo.connect(lg); lg.connect(o.frequency);
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+      o.connect(g); g.connect(master);
+      o.start(t0); lfo.start(t0);
+      o.stop(t0 + 0.6); lfo.stop(t0 + 0.6);
+      // Pisada sorda: golpe grave corto como paso pesado
+      var th = AC.createOscillator(); th.type = 'sine';
+      th.frequency.setValueAtTime(90, t0);
+      th.frequency.exponentialRampToValueAtTime(45, t0 + 0.12);
+      var tg = AC.createGain();
+      tg.gain.setValueAtTime(0.0001, t0);
+      tg.gain.exponentialRampToValueAtTime(0.5, t0 + 0.01);
+      tg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+      th.connect(tg); tg.connect(master);
+      th.start(t0); th.stop(t0 + 0.2);
+    });
   },
   trompeta: function () {
     // Trompeta brillante y juguetona: ta-ta-taaa staccato en octava alta.
@@ -771,22 +795,38 @@ function enviarPulla(fromTeam, pulla) {
   };
 }
 
-/* Risa humana real grabada (CC0: "laughter-male_029-030 037-042" de Gerent,
-   Freesound). Si el archivo no carga, se usa la síntesis anterior en silencio. */
-var risaAudio = null;
-function reproducirRisaReal() {
+/* Grabaciones reales de pullas (todas CC0 / dominio público, vía Openverse/Freesound).
+   Si un archivo no carga, se usa la síntesis anterior como respaldo silencioso.
+   - risa:     "laughter-male_029-030 037-042" de Gerent (Freesound, CC0)
+   - rayo:     "Thunder Storm" (Freesound, CC0)
+   - fiesta:   "fireworks exploding 1" (Freesound, CC0)
+   - trompeta: "Trumpet/Cornet Flourish" (Freesound, CC0)
+   - corona:   "fasching fanfare - Karnevals Tusch [Tataa] (short)" (Freesound, CC0)
+   - copa:     "Tada Fanfare A" (Freesound, CC0)
+   - aleluya:  "hallelujah" (Freesound, CC0)
+   - estrella: "Playing Glockenspiel" (Freesound, CC0)
+   - burro:    "Donkey braying close to the market, in Morocco" (Freesound, CC0) */
+var AUDIO_GRABACIONES = {
+  risa: 'audio/risa.mp3', rayo: 'audio/rayo.mp3', fiesta: 'audio/fiesta.mp3',
+  trompeta: 'audio/trompeta.mp3', corona: 'audio/corona.mp3', copa: 'audio/copa.mp3',
+  aleluya: 'audio/aleluya.mp3', estrella: 'audio/estrella.mp3', burro: 'audio/burro.mp3'
+};
+var audioCache = {};
+function reproducirGrabacion(id) {
   try {
-    if (!risaAudio) {
-      risaAudio = new Audio('audio/risa.mp3');
-      risaAudio.preload = 'auto';
+    var a = audioCache[id];
+    if (!a) {
+      a = new Audio(AUDIO_GRABACIONES[id]);
+      a.preload = 'auto';
+      audioCache[id] = a;
     }
-    risaAudio.currentTime = 0;
-    var p = risaAudio.play();
+    a.currentTime = 0;
+    var p = a.play();
     if (p && p.catch) {
-      p.catch(function () { if (PULLA_SFX.risa) PULLA_SFX.risa(); });
+      p.catch(function () { if (PULLA_SFX[id]) PULLA_SFX[id](); });
     }
   } catch (e) {
-    if (PULLA_SFX.risa) PULLA_SFX.risa();
+    if (PULLA_SFX[id]) PULLA_SFX[id]();
   }
 }
 
@@ -797,7 +837,7 @@ function mostrarPullaGrande(pulla) {
   el.innerHTML = '<div class="pb-emoji">' + pulla.emoji + '</div>' +
                  '<div class="pb-title">' + esc(pulla.titulo) + '</div>';
   document.body.appendChild(el);
-  if (pulla.sonido === 'risa') reproducirRisaReal();
+  if (AUDIO_GRABACIONES[pulla.sonido]) reproducirGrabacion(pulla.sonido);
   else if (PULLA_SFX[pulla.sonido]) PULLA_SFX[pulla.sonido]();
   else if (pulla.melodia) melody(pulla.melodia);
   requestAnimationFrame(function () { el.classList.add('show'); });
@@ -1030,8 +1070,9 @@ function cbsSala(registro) {
       salaPendiente = null;
       salaActiva = registro;
       var btn = $('shareBtn');
-      btn.textContent = '🟢 Compartiendo (detener)';
       btn.classList.add('sharing');
+      btn.setAttribute('aria-label', 'Compartiendo (toca para detener)');
+      btn.title = 'Compartiendo (toca para detener)';
       publicarEstado();
       var url = urlSala(registro.codigo);
       var datos = { title: 'Cristo Domino en vivo', text: 'Mira nuestra partida de dominó en vivo', url: url };
@@ -1091,8 +1132,9 @@ function detenerSala() {
   }
   var btn = $('shareBtn');
   if (btn) {
-    btn.textContent = '🔗 Compartir partida';
     btn.classList.remove('sharing');
+    btn.setAttribute('aria-label', 'Compartir partida');
+    btn.title = 'Compartir partida';
   }
 }
 

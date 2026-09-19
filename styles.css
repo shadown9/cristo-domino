@@ -292,11 +292,25 @@ body.light .header .logo{
 .history{margin-top:30px;}
 .history-head{
   display:flex;align-items:center;justify-content:space-between;
-  gap:8px;
+  gap:8px;flex-wrap:wrap;
 }
-.history-head h2{margin:0;font-size:30px;font-weight:800;letter-spacing:.3px;}
-.history-actions{display:flex;gap:10px;align-items:center;}
+.history-head h2{margin:0;font-size:30px;font-weight:800;letter-spacing:.3px;min-width:0;}
+.history-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;min-width:0;}
 .history-actions .link-btn{padding:6px 2px;white-space:nowrap;}
+
+/* Botón de compartir: un solo ícono compacto (sin texto) */
+.icon-btn{
+  background:none;border:none;cursor:pointer;
+  color:var(--accent);
+  width:36px;height:36px;flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:0;border-radius:10px;position:relative;
+}
+.icon-btn.sharing{color:#34c77b;}
+.icon-btn.sharing::after{
+  content:'';position:absolute;top:4px;right:4px;
+  width:8px;height:8px;border-radius:50%;background:#34c77b;
+}
 
 /* Bloque por partida: "Partida N · Meta X" / "Ganó Equipo Y" (o "en curso") */
 .hist-match{
@@ -483,7 +497,7 @@ body.espectador .score-card{cursor:default;}
   animation:giftGlow 2s ease-in-out infinite;
 }
 .spect-wait[hidden]{display:none;}
-#shareBtn.sharing{color:#34c77b;}
+/* (estado "compartiendo" del botón: ver .icon-btn.sharing arriba) */
 
 /* ---------- Pantallas grandes ---------- */
 @media (min-width:560px){

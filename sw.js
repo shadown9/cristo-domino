@@ -1,5 +1,5 @@
 /* Cristo Domino — Service Worker. App shell cacheado para uso sin conexión. */
-var CACHE = 'cristo-domino-v5';
+var CACHE = 'cristo-domino-v6';
 var ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,22 @@ var ASSETS = [
   './manifest.json',
   './audio/risa.mp3',
   './audio/risa.ogg',
+  './audio/rayo.mp3',
+  './audio/rayo.ogg',
+  './audio/fiesta.mp3',
+  './audio/fiesta.ogg',
+  './audio/trompeta.mp3',
+  './audio/trompeta.ogg',
+  './audio/corona.mp3',
+  './audio/corona.ogg',
+  './audio/copa.mp3',
+  './audio/copa.ogg',
+  './audio/aleluya.mp3',
+  './audio/aleluya.ogg',
+  './audio/estrella.mp3',
+  './audio/estrella.ogg',
+  './audio/burro.mp3',
+  './audio/burro.ogg',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-192.png',
