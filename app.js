@@ -466,8 +466,8 @@ function teamTotalHist(hands, team) {
 }
 
 /* Un bloque de partida: "Partida N · Meta X" / "Ganó Equipo Y" (o "en curso"),
-   dos columnas por equipo con total y manos numeradas en orden cronológico
-   de la partida (más recientes primero). */
+   dos columnas por equipo con total y manos numeradas POR EQUIPO desde 1
+   (más recientes primero). */
 function histMatchHTML(n, meta, winnerName, hands, nombres, colorIdx, enCurso) {
   var html = '<div class="hist-match">';
   html += '<div class="hist-match-head"><span class="hist-match-title">Partida ' + n +
@@ -479,11 +479,13 @@ function histMatchHTML(n, meta, winnerName, hands, nombres, colorIdx, enCurso) {
             esc(nombres[i]) + '</span><span class="hist-total">' +
             teamTotalHist(hands, i) + ' pts</span></div>';
     var rows = [];
+    var num = teamHands(hands, i).length; // cada equipo numera sus propias manos desde 1
     for (var k = hands.length - 1; k >= 0; k--) {
       if (hands[k].team === i) {
-        rows.push('<div class="hist-row"><span class="n">' + (k + 1) + '</span>' +
+        rows.push('<div class="hist-row"><span class="n">' + num + '</span>' +
                   '<span class="pts" style="color:' + histColor(colorIdx[i]) + '">+' +
                   hands[k].points + '</span></div>');
+        num--;
       }
     }
     html += rows.length ? rows.join('') : '<p class="hist-empty">Sin manos todavía.</p>';
