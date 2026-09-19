@@ -1,5 +1,5 @@
 /* Cristo Domino — Service Worker. App shell cacheado para uso sin conexión. */
-var CACHE = 'cristo-domino-v1';
+var CACHE = 'cristo-domino-v2';
 var ASSETS = [
   './',
   './index.html',

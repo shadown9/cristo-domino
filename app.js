@@ -9,17 +9,17 @@ var METAS = [100, 200, 300, 500];
 /* ---------- Pullas (contenido sano, para amigos de la iglesia) ---------- */
 var PULLAS = {
   basicas: [
-    { id: 'risa',     emoji: '😂', titulo: 'Risa buena',            melodia: [[523, .10], [659, .10], [784, .10], [659, .10], [523, .18]] },
-    { id: 'corona',   emoji: '👑', titulo: 'Rey del dominó',        melodia: [[392, .14], [523, .14], [659, .24]] },
-    { id: 'rayo',     emoji: '⚡', titulo: 'Más rápido que el tren', melodia: [[880, .06], [1174, .06], [1568, .14]] },
-    { id: 'tortuga',  emoji: '🐢', titulo: 'Sin prisa, con calma',  melodia: [[220, .18], [196, .18], [174, .28]] },
-    { id: 'trompeta', emoji: '🎺', titulo: 'Suena la victoria',     melodia: [[523, .09], [523, .09], [659, .20]] },
-    { id: 'estrella', emoji: '⭐', titulo: 'Brilla, brilla',        melodia: [[1046, .09], [1318, .09], [1568, .24]] }
+    { id: 'risa',     emoji: '😂', titulo: 'Risa buena',            sonido: 'risa' },
+    { id: 'corona',   emoji: '👑', titulo: 'Rey del dominó',        sonido: 'corona' },
+    { id: 'rayo',     emoji: '⚡', titulo: 'Más rápido que el tren', sonido: 'rayo' },
+    { id: 'tortuga',  emoji: '🐢', titulo: 'Sin prisa, con calma',  sonido: 'tortuga' },
+    { id: 'trompeta', emoji: '🎺', titulo: 'Suena la victoria',     sonido: 'trompeta' },
+    { id: 'estrella', emoji: '⭐', titulo: 'Brilla, brilla',        sonido: 'estrella' }
   ],
   epicas: [
-    { id: 'copa',    emoji: '🏆', titulo: 'Campeón con humildad', melodia: [[523, .11], [659, .11], [784, .11], [1046, .30]] },
-    { id: 'fiesta',  emoji: '🎆', titulo: 'Fiesta sana',          melodia: [[659, .08], [784, .08], [1046, .08], [784, .08], [1046, .22]] },
-    { id: 'aleluya', emoji: '🙌', titulo: 'Gloria a Dios',       melodia: [[392, .14], [523, .14], [659, .14], [784, .34]] }
+    { id: 'copa',    emoji: '🏆', titulo: 'Campeón con humildad', sonido: 'copa' },
+    { id: 'fiesta',  emoji: '🎆', titulo: 'Fiesta sana',          sonido: 'fiesta' },
+    { id: 'aleluya', emoji: '🙌', titulo: 'Gloria a Dios',       sonido: 'aleluya' }
   ]
 };
 var GROUP_NAMES = { basicas: 'Básicas', epicas: 'Épicas' };
@@ -98,6 +98,176 @@ var SFX = {
   fanfarria:function () { melody([[392, .12], [392, .12], [392, .12], [523, .22], [659, .10], [784, .36]], 'sawtooth', 0.45); }
 };
 
+/* ----- Sonidos realistas de pullas (todo sintetizado en WebAudio) ----- */
+var _noiseBuf = null;
+function getNoiseBuf() {
+  if (_noiseBuf) return _noiseBuf;
+  var len = Math.floor(AC.sampleRate * 1.2);
+  _noiseBuf = AC.createBuffer(1, len, AC.sampleRate);
+  var d = _noiseBuf.getChannelData(0);
+  for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return _noiseBuf;
+}
+function noiseHit(t0, dur, type, freq, q, vol) {
+  var src = AC.createBufferSource();
+  src.buffer = getNoiseBuf(); src.loop = true;
+  var f = AC.createBiquadFilter();
+  f.type = type; f.frequency.value = freq; f.Q.value = q || 1;
+  var g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t0); src.stop(t0 + dur + 0.05);
+}
+function brassNote(freq, t0, dur, vol) {
+  // Timbre de metal: sierra + filtro + ataque + vibrato
+  var o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
+  var f = AC.createBiquadFilter();
+  f.type = 'lowpass'; f.frequency.value = 2100; f.Q.value = 0.8;
+  var g = AC.createGain();
+  var v = vol || 0.5;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(v, t0 + 0.055);
+  g.gain.setValueAtTime(v, t0 + Math.max(0.056, dur - 0.09));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  var lfo = AC.createOscillator(); lfo.frequency.value = 5.6;
+  var lg = AC.createGain(); lg.gain.value = freq * 0.014;
+  lfo.connect(lg); lg.connect(o.frequency);
+  o.connect(f); f.connect(g); g.connect(master);
+  o.start(t0); lfo.start(t0);
+  o.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+}
+function softNote(freq, t0, dur, type, vol) {
+  var o = AC.createOscillator(); o.type = type || 'sine'; o.frequency.value = freq;
+  var g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol || 0.4, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+
+var PULLA_SFX = {
+  risa: function () {
+    // Carcajada: ráfagas cortas "ja-ja-ja" con tono descendente
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    for (var i = 0; i < 6; i++) {
+      (function (i) {
+        var t0 = t + i * 0.13;
+        var o = AC.createOscillator(); o.type = 'triangle';
+        var f0 = 310 - i * 22;
+        o.frequency.setValueAtTime(f0, t0);
+        o.frequency.exponentialRampToValueAtTime(Math.max(120, f0 * 0.6), t0 + 0.09);
+        var bp = AC.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 950; bp.Q.value = 1.1;
+        var g = AC.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.11);
+        o.connect(bp); bp.connect(g); g.connect(master);
+        o.start(t0); o.stop(t0 + 0.16);
+      })(i);
+    }
+  },
+  corona: function () {
+    // Llamada real: Sol-Do-Mi-Sol sostenido
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    [[392, 0, 0.14], [523, 0.15, 0.14], [659, 0.30, 0.14], [784, 0.45, 0.55]]
+      .forEach(function (n) { brassNote(n[0], t + n[1], n[2], 0.42); });
+  },
+  rayo: function () {
+    // Relámpago: zumbido eléctrico descendente + chasquido
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    var o = AC.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(1900, t);
+    o.frequency.exponentialRampToValueAtTime(85, t + 0.36);
+    var g = AC.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.45, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.5);
+    noiseHit(t, 0.1, 'highpass', 2800, 0.8, 0.3);
+  },
+  tortuga: function () {
+    // Lenta y grave: tres notas bajas descendentes
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    [[196, 0], [174, 0.34], [147, 0.68]]
+      .forEach(function (n) { softNote(n[0], t + n[1], 0.34, 'sine', 0.42); });
+  },
+  trompeta: function () {
+    // Trompeta de verdad: ta-ta-taaa con vibrato
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    brassNote(523, t, 0.13, 0.45);
+    brassNote(523, t + 0.15, 0.13, 0.45);
+    brassNote(784, t + 0.30, 0.55, 0.48);
+  },
+  estrella: function () {
+    // Destello: glissando ascendente + tintineos
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    var o = AC.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(1500, t);
+    o.frequency.exponentialRampToValueAtTime(3100, t + 0.28);
+    var g = AC.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.4);
+    [2093, 2637, 3520].forEach(function (fr, i) {
+      softNote(fr, t + 0.30 + i * 0.11, 0.16, 'sine', 0.32);
+    });
+  },
+  copa: function () {
+    // Fanfarria épica + acorde final de campeón
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    [[523, 0, 0.13], [659, 0.14, 0.13], [784, 0.28, 0.13], [1046, 0.42, 0.65]]
+      .forEach(function (n) { brassNote(n[0], t + n[1], n[2], 0.44); });
+    [523, 659, 784].forEach(function (fr) { brassNote(fr, t + 0.42, 0.75, 0.2); });
+  },
+  fiesta: function () {
+    // Fuegos artificiales: silbido ascendente + estallidos
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    var o = AC.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(700, t);
+    o.frequency.exponentialRampToValueAtTime(2500, t + 0.45);
+    var g = AC.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.55);
+    [[0.5, 1800], [0.78, 1200], [1.05, 2400], [1.3, 900]]
+      .forEach(function (p) { noiseHit(t + p[0], 0.22, 'bandpass', p[1], 1.4, 0.5); });
+  },
+  aleluya: function () {
+    // Coro cálido: acorde con ataque lento y caída suave
+    if (!AC) return;
+    var t = AC.currentTime + 0.02;
+    [261.6, 329.6, 392, 523.3].forEach(function (fr) {
+      var o1 = AC.createOscillator(); o1.type = 'triangle'; o1.frequency.value = fr;
+      var o2 = AC.createOscillator(); o2.type = 'sine'; o2.frequency.value = fr * 1.003;
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16, t + 0.5);
+      g.gain.setValueAtTime(0.16, t + 1.3);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
+      o1.connect(g); o2.connect(g); g.connect(master);
+      o1.start(t); o2.start(t);
+      o1.stop(t + 2); o2.stop(t + 2);
+    });
+  }
+};
+
 /* ---------- Utilidades ---------- */
 function $(id) { return document.getElementById(id); }
 function esc(s) {
@@ -135,9 +305,12 @@ function renderCards() {
     var card = $('card' + i);
     card.classList.toggle('selected', state.selected === i);
     var gift = $('gift' + i);
-    var unlocked = state.pullas[i].length > 0;
-    gift.classList.toggle('unlocked', unlocked);
-    gift.classList.toggle('locked', !unlocked);
+    // El regalo solo está encendido en el equipo que va ganando en el momento.
+    var s0 = state.teams[0].score, s1 = state.teams[1].score;
+    var lider = s0 === s1 ? -1 : (s0 > s1 ? 0 : 1);
+    var activo = lider === i;
+    gift.classList.toggle('unlocked', activo);
+    gift.classList.toggle('locked', !activo);
     gift.setAttribute('aria-label', 'Pullas de ' + team.name);
   }
   $('panelTitle').textContent = 'Puntos para ' + state.teams[state.selected].name;
@@ -164,7 +337,9 @@ function renderHistory() {
   var body = $('historyBody');
   var html = '';
 
-  // Partida actual: manos por equipo, numeradas desde 1 (más recientes primero)
+  // Partida en curso: dividida por partida y por equipo.
+  // Cada equipo numera SUS propias manos desde 1 (más recientes primero).
+  html += '<div class="hist-match"><p class="hist-match-title">Partida #' + state.gameN + ' · en curso</p>';
   for (var i = 0; i < 2; i++) {
     var th = teamHands(state.hands, i);
     html += '<div class="hist-group"><p class="hist-group-title">' + esc(state.teams[i].name) + '</p>';
@@ -179,6 +354,7 @@ function renderHistory() {
     }
     html += '</div>';
   }
+  html += '</div>';
 
   // Partidas archivadas
   state.history.forEach(function (g) {
@@ -484,7 +660,8 @@ function mostrarPullaGrande(pulla) {
   el.innerHTML = '<div class="pb-emoji">' + pulla.emoji + '</div>' +
                  '<div class="pb-title">' + esc(pulla.titulo) + '</div>';
   document.body.appendChild(el);
-  melody(pulla.melodia);
+  if (PULLA_SFX[pulla.sonido]) PULLA_SFX[pulla.sonido]();
+  else if (pulla.melodia) melody(pulla.melodia);
   requestAnimationFrame(function () { el.classList.add('show'); });
   setTimeout(function () {
     el.classList.remove('show');
