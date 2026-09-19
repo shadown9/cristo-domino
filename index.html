@@ -47,7 +47,6 @@
       <button class="gift locked" id="gift1" data-team="1" aria-label="Pullas del Equipo 2">🎁</button>
     </div>
   </section>
-  <button id="resetDomBtn" class="link-btn center">Reiniciar dominadas</button>
 
   <!-- Selector de meta -->
   <section class="meta-row" aria-label="Meta de puntos">
@@ -90,13 +89,16 @@
     <div class="history-head">
       <h2>Historial</h2>
       <div class="history-actions">
-        <button id="newGameBtn" class="link-btn">Partida nueva</button>
-        <button id="undoBtn" class="link-btn">Deshacer última</button>
+        <button id="undoBtn" class="link-btn accent">Deshacer última</button>
+        <button id="clearHistoryBtn" class="link-btn muted">Borrar historial</button>
         <button id="shareBtn" class="link-btn">🔗 Compartir partida</button>
       </div>
     </div>
     <div id="historyBody"></div>
-    <button id="clearHistoryBtn" class="discreet">Borrar historial</button>
+    <div class="history-foot">
+      <button id="newGameBtn" class="link-btn muted">Partida nueva</button>
+      <button id="resetDomBtn" class="link-btn danger">Reiniciar dominadas</button>
+    </div>
   </section>
 
 </main>

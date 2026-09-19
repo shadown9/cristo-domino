@@ -428,49 +428,61 @@ function teamHands(hands, team) {
   return hands.filter(function (h) { return h.team === team; });
 }
 
-function renderHistory() {
-  var body = $('historyBody');
-  var html = '';
+/* Color de un equipo para el historial: legible en ambos temas. */
+function histColor(idx) {
+  var c = TEAM_COLORS[(idx == null ? 0 : idx) % TEAM_COLORS.length];
+  if (state.theme === 'light' && c === '#ffffff') return '#1a1a1e';
+  return c;
+}
 
-  // Partida en curso: dividida por partida y por equipo.
-  // Cada equipo numera SUS propias manos desde 1 (más recientes primero).
-  html += '<div class="hist-match"><p class="hist-match-title">Partida #' + state.gameN + ' · en curso</p>';
+function teamTotalHist(hands, team) {
+  var t = 0;
+  for (var i = 0; i < hands.length; i++) if (hands[i].team === team) t += hands[i].points;
+  return t;
+}
+
+/* Un bloque de partida: "Partida N · Meta X" / "Ganó Equipo Y" (o "en curso"),
+   dos columnas por equipo con total y manos numeradas en orden cronológico
+   de la partida (más recientes primero). */
+function histMatchHTML(n, meta, winnerName, hands, nombres, colorIdx, enCurso) {
+  var html = '<div class="hist-match">';
+  html += '<div class="hist-match-head"><span class="hist-match-title">Partida ' + n +
+          ' · Meta ' + meta + '</span><span class="hist-match-right">' +
+          (enCurso ? 'en curso' : 'Ganó ' + esc(winnerName)) + '</span></div>';
+  html += '<div class="hist-cols">';
   for (var i = 0; i < 2; i++) {
-    var th = teamHands(state.hands, i);
-    html += '<div class="hist-group"><p class="hist-group-title">' + esc(state.teams[i].name) + '</p>';
-    if (!th.length) {
-      html += '<p class="hist-empty">Sin manos todavía.</p>';
-    } else {
-      for (var k = th.length - 1; k >= 0; k--) {
-        html += '<div class="hist-row"><span class="n">' + (k + 1) + '</span>' +
-                '<span class="nm">Mano</span>' +
-                '<span class="pts">+' + th[k].points + '</span></div>';
+    html += '<div class="hist-col"><div class="hist-col-head"><span class="hist-team">' +
+            esc(nombres[i]) + '</span><span class="hist-total">' +
+            teamTotalHist(hands, i) + ' pts</span></div>';
+    var rows = [];
+    for (var k = hands.length - 1; k >= 0; k--) {
+      if (hands[k].team === i) {
+        rows.push('<div class="hist-row"><span class="n">' + (k + 1) + '</span>' +
+                  '<span class="pts" style="color:' + histColor(colorIdx[i]) + '">+' +
+                  hands[k].points + '</span></div>');
       }
     }
+    html += rows.length ? rows.join('') : '<p class="hist-empty">Sin manos todavía.</p>';
     html += '</div>';
   }
-  html += '</div>';
+  html += '</div></div>';
+  return html;
+}
 
+function renderHistory() {
+  var html = '';
+  // Partida en curso
+  html += histMatchHTML(state.gameN, state.meta, null, state.hands,
+    [state.teams[0].name, state.teams[1].name],
+    [state.teams[0].color, state.teams[1].color], true);
   // Partidas archivadas
   state.history.forEach(function (g) {
     var winName = (g.nombres && g.ganador != null && g.nombres[g.ganador]) ? g.nombres[g.ganador] : '—';
-    var inner = '';
-    for (var i = 0; i < 2; i++) {
-      var th = teamHands(g.hands || [], i);
-      if (!th.length) continue;
-      var nombre = (g.nombres && g.nombres[i]) ? g.nombres[i] : ('Equipo ' + (i + 1));
-      inner += '<div class="row"><b>' + esc(nombre) + '</b><span>' +
-               th.map(function (h, k) { return 'M' + (k + 1) + ': +' + h.points; }).join(' · ') +
-               '</span></div>';
-    }
-    html += '<details class="arch"><summary>Partida #' + g.n +
-            ' · ' + fmtFecha(g.fecha) +
-            ' · Meta ' + g.meta +
-            ' · 🏆 ' + esc(winName) + '</summary>' +
-            '<div class="arch-hands">' + (inner || '<div class="row">Sin manos.</div>') + '</div></details>';
+    html += histMatchHTML(g.n, g.meta, winName, g.hands || [],
+      g.nombres || ['Equipo 1', 'Equipo 2'],
+      g.colores || [1, 1], false);
   });
-
-  body.innerHTML = html;
+  $('historyBody').innerHTML = html;
 }
 
 function renderTheme() {
@@ -566,6 +578,7 @@ function aceptarGanador() {
     meta: state.meta,
     ganador: state.selected,
     nombres: [state.teams[0].name, state.teams[1].name],
+    colores: [state.teams[0].color, state.teams[1].color],
     hands: state.hands.map(function (h) { return { team: h.team, points: h.points, ts: h.ts }; })
   });
   state.hands = [];

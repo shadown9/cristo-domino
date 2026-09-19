@@ -185,7 +185,9 @@ body.light .header .logo{
   cursor:pointer;
   padding:6px 4px;
 }
-.link-btn.center{display:block;margin:10px auto 0;}
+.link-btn.muted{color:var(--muted);}
+.link-btn.danger{color:#ff6b7a;}
+.link-btn.accent{color:var(--accent);}
 .discreet{
   display:block;margin:18px auto 0;
   background:none;border:none;
@@ -290,40 +292,51 @@ body.light .header .logo{
 .history{margin-top:30px;}
 .history-head{
   display:flex;align-items:center;justify-content:space-between;
+  gap:8px;
 }
-.history-head h2{margin:0;font-size:24px;font-weight:800;}
-.history-actions{display:flex;gap:6px;}
-.hist-group{margin-top:14px;}
+.history-head h2{margin:0;font-size:30px;font-weight:800;letter-spacing:.3px;}
+.history-actions{display:flex;gap:10px;align-items:center;}
+.history-actions .link-btn{padding:6px 2px;white-space:nowrap;}
+
+/* Bloque por partida: "Partida N · Meta X" / "Ganó Equipo Y" (o "en curso") */
+.hist-match{
+  border-top:1px solid var(--border);
+  padding:14px 2px 6px;
+  margin-top:6px;
+}
+.hist-match-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:8px;margin-bottom:12px;
+}
 .hist-match-title{
-  color:var(--text);font-size:16px;font-weight:800;
-  margin:14px 0 2px;letter-spacing:.4px;
+  color:var(--text);font-size:17px;font-weight:800;letter-spacing:.3px;
 }
-.hist-group-title{
-  color:var(--muted);font-size:14px;font-weight:700;
-  margin:0 0 4px;letter-spacing:.4px;
+.hist-match-right{
+  color:var(--muted);font-size:14px;font-weight:600;white-space:nowrap;
 }
+/* Dos columnas por equipo */
+.hist-cols{display:flex;gap:18px;}
+.hist-col{flex:1;min-width:0;}
+.hist-col-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:8px;margin-bottom:8px;
+}
+.hist-team{color:var(--text);font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hist-total{color:var(--muted);font-size:16px;font-weight:600;white-space:nowrap;}
 .hist-row{
   display:flex;align-items:center;justify-content:space-between;
-  padding:13px 2px;
-  border-bottom:1px solid var(--border);
-  font-size:17px;
+  padding:9px 2px;
+  font-size:16px;
 }
-.hist-row .n{color:var(--muted);width:34px;font-size:15px;}
-.hist-row .nm{flex:1;}
-.hist-row .pts{color:var(--accent);font-weight:700;}
-.hist-empty{color:var(--muted);font-size:15px;margin-top:10px;}
-details.arch{margin-top:10px;border:1px solid var(--border);border-radius:14px;background:var(--card);}
-details.arch summary{
-  padding:12px 14px;cursor:pointer;font-size:15px;font-weight:600;list-style:none;
+.hist-row .n{color:var(--muted);font-size:16px;}
+.hist-row .pts{font-weight:800;}
+.hist-empty{color:var(--muted);font-size:14px;margin:4px 0 8px;}
+
+.history-foot{
+  border-top:1px solid var(--border);
+  margin-top:10px;padding:14px 0 8px;
+  display:flex;justify-content:center;gap:34px;
 }
-details.arch summary::-webkit-details-marker{display:none;}
-.arch-hands{padding:0 14px 12px;}
-.arch-hands .row{
-  display:flex;justify-content:space-between;
-  font-size:14px;color:var(--muted);
-  padding:5px 0;border-top:1px dashed var(--border);
-}
-.arch-hands .row b{color:var(--text);}
 
 /* ---------- Modal de pullas ---------- */
 .modal-backdrop{
