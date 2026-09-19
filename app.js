@@ -591,6 +591,11 @@ function revisarGanador() {
   render();
   publicarEstado();
   publicarGanador(t);
+  setTimeout(function () {
+    try {
+      if (salaActiva) salaActiva.mqtt.publicar(salaActiva.topico, { t: 'fin' }, true);
+    } catch (e) {}
+  }, 10000);
 }
 
 function aceptarGanador() {
@@ -947,8 +952,8 @@ function mqttPaqueteSubscribe(pid, topico) {
   var id = new Uint8Array([(pid >> 8) & 0xff, pid & 0xff]);
   return mqttPaquete(0x82, [id, mqttEncodeUtf8(topico), new Uint8Array([0x00])]);
 }
-function mqttPaquetePublish(topico, texto) {
-  return mqttPaquete(0x30, [mqttEncodeUtf8(topico), new TextEncoder().encode(texto)]);
+function mqttPaquetePublish(topico, texto, retain) {
+  return mqttPaquete(retain ? 0x31 : 0x30, [mqttEncodeUtf8(topico), new TextEncoder().encode(texto)]);
 }
 function mqttLeerLongitud(buf, pos) {
   var mult = 1, valor = 0, i = 0, b;
@@ -1003,9 +1008,9 @@ function urlSala(codigo) {
 function mqttConectar(topicoSub, cbs) {
   var idx = 0, ws = null, pingTimer = null, cerradoVoluntario = false;
   var cliente = {
-    publicar: function (topico, obj) {
+    publicar: function (topico, obj, retain) {
       if (ws && ws.readyState === 1) {
-        try { ws.send(mqttPaquetePublish(topico, JSON.stringify(obj))); } catch (e) {}
+        try { ws.send(mqttPaquetePublish(topico, JSON.stringify(obj), retain)); } catch (e) {}
       }
     },
     cerrar: function () {
@@ -1127,7 +1132,7 @@ function detenerSala() {
   salaActiva = null;
   salaPendiente = null;
   if (reg) {
-    try { reg.mqtt.publicar(reg.topico, { t: 'fin' }); } catch (e) {}
+    try { reg.mqtt.publicar(reg.topico, { t: 'fin' }, true); } catch (e) {}
     try { reg.mqtt.cerrar(); } catch (e) {}
   }
   var btn = $('shareBtn');
@@ -1144,12 +1149,13 @@ function publicarEstado() {
     salaActiva.mqtt.publicar(salaActiva.topico, {
       t: 'estado',
       v: 1,
+      ts: Date.now(),
       meta: state.meta,
       teams: [
         { name: state.teams[0].name, color: state.teams[0].color, score: state.teams[0].score, dominadas: state.teams[0].dominadas },
         { name: state.teams[1].name, color: state.teams[1].color, score: state.teams[1].score, dominadas: state.teams[1].dominadas }
       ]
-    });
+    }, true);
   } catch (e) {}
 }
 function publicarPulla(fromTeam, pullaId) {
@@ -1214,6 +1220,8 @@ function conectarInvitado() {
 function recibirMensajeInvitado(m) {
   if (!m || typeof m.t !== 'string') return;
   if (m.t === 'estado') {
+    var ts = m.ts | 0;
+    if (ts && Date.now() - ts > 2 * 3600 * 1000) return; // estado retenido muy viejo: sala muerta
     invitadoEstado = true;
     $('spectWait').hidden = true;
     try {
