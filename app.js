@@ -150,25 +150,71 @@ function softNote(freq, t0, dur, type, vol) {
 
 var PULLA_SFX = {
   risa: function () {
-    // Carcajada: ráfagas cortas "ja-ja-ja" con tono descendente
+    // Carcajada humana: "ja-ja-ja-ja" con timbre vocal (formantes de la "a"),
+    // respiración, ritmo e intensidad naturales; nada de tono robótico.
     if (!AC) return;
     var t = AC.currentTime + 0.02;
-    for (var i = 0; i < 6; i++) {
-      (function (i) {
-        var t0 = t + i * 0.13;
-        var o = AC.createOscillator(); o.type = 'triangle';
-        var f0 = 310 - i * 22;
-        o.frequency.setValueAtTime(f0, t0);
-        o.frequency.exponentialRampToValueAtTime(Math.max(120, f0 * 0.6), t0 + 0.09);
-        var bp = AC.createBiquadFilter();
-        bp.type = 'bandpass'; bp.frequency.value = 950; bp.Q.value = 1.1;
-        var g = AC.createGain();
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.11);
-        o.connect(bp); bp.connect(g); g.connect(master);
-        o.start(t0); o.stop(t0 + 0.16);
-      })(i);
+    // Ruido compartido para la respiración de cada sílaba
+    var nb = AC.createBuffer(1, Math.floor(AC.sampleRate * 1.5), AC.sampleRate);
+    var nd = nb.getChannelData(0);
+    for (var n = 0; n < nd.length; n++) nd[n] = Math.random() * 2 - 1;
+
+    function ha(t0, f0, dur, vol) {
+      // Cuerda vocal: sierra rica en armónicos -> formantes de "a" (730/1090 Hz)
+      var o = AC.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f0 * 1.12, t0);
+      o.frequency.exponentialRampToValueAtTime(Math.max(90, f0 * 0.68), t0 + dur);
+      var f1 = AC.createBiquadFilter(); f1.type = 'bandpass';
+      f1.frequency.value = 730; f1.Q.value = 1.3;
+      var f2 = AC.createBiquadFilter(); f2.type = 'bandpass';
+      f2.frequency.value = 1090; f2.Q.value = 1.5;
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.018);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(f1); o.connect(f2); f1.connect(g); f2.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+      // Aire de la risa: ruido filtrado mezclado bajo
+      var ns = AC.createBufferSource(); ns.buffer = nb;
+      var nf = AC.createBiquadFilter(); nf.type = 'bandpass';
+      nf.frequency.value = 950; nf.Q.value = 0.8;
+      var ng = AC.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.exponentialRampToValueAtTime(vol * 0.28, t0 + 0.02);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      ns.connect(nf); nf.connect(ng); ng.connect(master);
+      ns.start(t0); ns.stop(t0 + dur + 0.05);
+    }
+
+    // Inhalación previa (0.25 s)
+    (function () {
+      var ns = AC.createBufferSource(); ns.buffer = nb;
+      var nf = AC.createBiquadFilter(); nf.type = 'bandpass';
+      nf.frequency.value = 600; nf.Q.value = 0.7;
+      var g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.10, t + 0.22);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.27);
+      ns.connect(nf); nf.connect(g); g.connect(master);
+      ns.start(t); ns.stop(t + 0.32);
+    })();
+
+    // Secuencia: [retardo, tono, duración, volumen] con arco natural
+    // (arranca suave, crece, y se apaga riendo) + jitter de ritmo
+    var seq = [
+      [0.30, 296, 0.105, 0.30],
+      [0.445, 318, 0.115, 0.42],
+      [0.60, 306, 0.120, 0.50],
+      [0.765, 288, 0.125, 0.55],
+      [0.94, 268, 0.130, 0.52],
+      [1.12, 248, 0.140, 0.44],
+      [1.31, 226, 0.160, 0.33]
+    ];
+    for (var i = 0; i < seq.length; i++) {
+      (function (s) {
+        var jit = (Math.random() - 0.5) * 0.018; // ritmo humano, no metrónomo
+        ha(t + s[0] + jit, s[1] * (1 + (Math.random() - 0.5) * 0.06), s[2], s[3]);
+      })(seq[i]);
     }
   },
   corona: function () {
