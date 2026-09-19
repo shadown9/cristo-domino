@@ -1023,17 +1023,32 @@ function codigoDeURL() {
   } catch (e) {}
   return null;
 }
-function urlSala(codigo) {
+function urlSala(codigo, broker) {
   var base = String(location.href).split('?')[0].split('#')[0];
-  return base + '?mirar=' + codigo;
+  return base + '?mirar=' + codigo + (broker != null ? '&b=' + broker : '');
+}
+function brokerDeURL() {
+  try {
+    var m = new URLSearchParams(location.search).get('b');
+    if (m != null && /^[0-9]+$/.test(m)) {
+      var n = parseInt(m, 10);
+      if (n >= 0 && n < MQTT_BROKERS.length) return n;
+    }
+  } catch (e) {}
+  return null;
 }
 /* ===== MQTT-MINI puro: fin ===== */
 
 /* Conexión MQTT: prueba los brokers en orden hasta que uno responda.
    cbs = { abierto(cliente), mensaje(topico, obj), cerrado(motivo) }
    cliente = { publicar(topico, obj), cerrar() } */
-function mqttConectar(topicoSub, cbs) {
-  var idx = 0, ws = null, pingTimer = null, cerradoVoluntario = false;
+function mqttConectar(topicoSub, cbs, brokerPreferido) {
+  var orden = [];
+  for (var bi = 0; bi < MQTT_BROKERS.length; bi++) orden.push(bi);
+  if (brokerPreferido != null && brokerPreferido >= 0 && brokerPreferido < MQTT_BROKERS.length) {
+    orden = [brokerPreferido].concat(orden.filter(function (x) { return x !== brokerPreferido; }));
+  }
+  var oi = 0, ws = null, pingTimer = null, cerradoVoluntario = false;
   var cliente = {
     publicar: function (topico, obj, retain) {
       if (ws && ws.readyState === 1) {
@@ -1047,44 +1062,56 @@ function mqttConectar(topicoSub, cbs) {
     },
     vivo: function () { return !!(ws && ws.readyState === 1); }
   };
+  function procesarPaquete(pkt, conectoInfo) {
+    if (!conectoInfo.conecto) {
+      if (esConnackOk(pkt)) {
+        conectoInfo.conecto = true;
+        clearTimeout(conectoInfo.t);
+        try { if (topicoSub) ws.send(mqttPaqueteSubscribe(1, topicoSub)); } catch (e) {}
+        pingTimer = setInterval(function () {
+          try { ws.send(new Uint8Array([0xc0, 0x00])); } catch (e) {}
+        }, 45000);
+        cbs.abierto(cliente, conectoInfo.brokerIdx);
+      }
+      return;
+    }
+    var pub = mqttExtraerPublicacion(pkt);
+    if (pub && cbs.mensaje) {
+      try { cbs.mensaje(pub.topico, JSON.parse(pub.texto)); } catch (e) {}
+    }
+  }
   function intentar() {
     if (cerradoVoluntario) return;
-    if (idx >= MQTT_BROKERS.length) { cbs.cerrado('sin-broker'); return; }
-    var url = MQTT_BROKERS[idx++];
+    if (oi >= orden.length) { cbs.cerrado('sin-broker'); return; }
+    var brokerIdx = orden[oi++];
+    var url = MQTT_BROKERS[brokerIdx];
     try { ws = new WebSocket(url, 'mqtt'); }
     catch (e) { intentar(); return; }
     ws.binaryType = 'arraybuffer';
-    var conecto = false;
-    var t = setTimeout(function () { try { ws.close(); } catch (e) {} }, 12000);
+    var info = { conecto: false, brokerIdx: brokerIdx, t: null };
+    info.t = setTimeout(function () { try { ws.close(); } catch (e) {} }, 12000);
     ws.onopen = function () {
       try { ws.send(mqttPaqueteConnect('cd-' + Math.random().toString(36).slice(2, 10))); }
       catch (e) { try { ws.close(); } catch (e2) {} }
     };
     ws.onmessage = function (ev) {
-      var buf = new Uint8Array(ev.data);
-      if (!conecto) {
-        if (esConnackOk(buf)) {
-          conecto = true;
-          clearTimeout(t);
-          try { if (topicoSub) ws.send(mqttPaqueteSubscribe(1, topicoSub)); } catch (e) {}
-          pingTimer = setInterval(function () {
-            try { ws.send(new Uint8Array([0xc0, 0x00])); } catch (e) {}
-          }, 45000);
-          cbs.abierto(cliente);
-        }
-        return;
-      }
-      var pub = mqttExtraerPublicacion(buf);
-      if (pub && cbs.mensaje) {
-        try { cbs.mensaje(pub.topico, JSON.parse(pub.texto)); } catch (e) {}
+      // Un mensaje WebSocket puede traer varios paquetes MQTT juntos: procesarlos todos.
+      var buf = new Uint8Array(ev.data), off = 0;
+      while (off < buf.length) {
+        var rl = mqttLeerLongitud(buf, off + 1);
+        if (!rl) break;
+        var total = 1 + rl.bytes + rl.valor;
+        if (off + total > buf.length) break;
+        procesarPaquete(buf.slice(off, off + total), info);
+        off += total;
       }
     };
     ws.onerror = function () { /* onclose se encarga */ };
     ws.onclose = function () {
-      clearTimeout(t);
+      clearTimeout(info.t);
       clearInterval(pingTimer);
       if (cerradoVoluntario) return;
-      if (!conecto) intentar();
+      if (!info.conecto) intentar();
       else cbs.cerrado('desconectado');
     };
   }
@@ -1098,17 +1125,18 @@ var salaPendiente = null;  // mientras conecta
 
 function cbsSala(registro) {
   return {
-    abierto: function (cli) {
+    abierto: function (cli, brokerIdx) {
       if (salaPendiente !== registro) { try { cli.cerrar(); } catch (e) {} return; }
       salaPendiente = null;
       salaActiva = registro;
+      registro.broker = brokerIdx;
       var btn = $('shareBtn');
       btn.classList.add('sharing');
       btn.setAttribute('aria-label', 'Compartiendo (toca para detener)');
       btn.title = 'Compartiendo (toca para detener)';
       publicarEstado();
       if (!registro.silencioso) {
-        var url = urlSala(registro.codigo);
+        var url = urlSala(registro.codigo, registro.broker);
         var datos = { title: 'Cristo Domino en vivo', text: 'Mira nuestra partida de dominó en vivo', url: url };
         if (navigator.share) {
           navigator.share(datos).catch(function () {});
@@ -1257,7 +1285,7 @@ function conectarInvitado() {
         clearTimeout(invitadoTimer);
         invitadoTimer = setTimeout(conectarInvitado, 5000);
       }
-    });
+    }, brokerDeURL());
   } catch (e) {
     clearTimeout(invitadoTimer);
     invitadoTimer = setTimeout(conectarInvitado, 8000);
