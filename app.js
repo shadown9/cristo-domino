@@ -1019,7 +1019,8 @@ function mqttConectar(topicoSub, cbs) {
       cerradoVoluntario = true;
       clearInterval(pingTimer);
       try { if (ws) ws.close(); } catch (e) {}
-    }
+    },
+    vivo: function () { return !!(ws && ws.readyState === 1); }
   };
   function intentar() {
     if (cerradoVoluntario) return;
@@ -1081,16 +1082,18 @@ function cbsSala(registro) {
       btn.setAttribute('aria-label', 'Compartiendo (toca para detener)');
       btn.title = 'Compartiendo (toca para detener)';
       publicarEstado();
-      var url = urlSala(registro.codigo);
-      var datos = { title: 'Cristo Domino en vivo', text: 'Mira nuestra partida de dominó en vivo', url: url };
-      if (navigator.share) {
-        navigator.share(datos).catch(function () {});
-      } else if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(function () {
-          toast('Enlace copiado, compártelo con tus amigos 🔗');
-        }).catch(function () { toast('Comparte este enlace: ' + url); });
-      } else {
-        toast('Comparte este enlace: ' + url);
+      if (!registro.silencioso) {
+        var url = urlSala(registro.codigo);
+        var datos = { title: 'Cristo Domino en vivo', text: 'Mira nuestra partida de dominó en vivo', url: url };
+        if (navigator.share) {
+          navigator.share(datos).catch(function () {});
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function () {
+            toast('Enlace copiado, compártelo con tus amigos 🔗');
+          }).catch(function () { toast('Comparte este enlace: ' + url); });
+        } else {
+          toast('Comparte este enlace: ' + url);
+        }
       }
     },
     mensaje: function () {},
@@ -1129,8 +1132,23 @@ function compartirPartida() {
   registro.mqtt = mqttConectar(null, cbsSala(registro));
 }
 
-function detenerSala() {
-  var reg = salaActiva || salaPendiente;
+/* Si la conexión de la sala se murió (p. ej. la app pasó a segundo plano),
+   reconecta con el mismo código sin volver a abrir el diálogo de compartir. */
+function asegurarSala() {
+  if (!salaActiva || salaPendiente || MODO_ESPECTADOR) return;
+  var cli = salaActiva.mqtt;
+  if (cli && cli.vivo && cli.vivo()) return;
+  try { if (cli) cli.cerrar(); } catch (e) {}
+  salaActiva.intentos = 0;
+  salaActiva.silencioso = true;
+  salaPendiente = salaActiva;
+  salaActiva.mqtt = mqttConectar(null, cbsSala(salaActiva));
+}
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) asegurarSala();
+});
+
+function detenerSala() {  var reg = salaActiva || salaPendiente;
   salaActiva = null;
   salaPendiente = null;
   if (reg) {
@@ -1147,6 +1165,8 @@ function detenerSala() {
 
 function publicarEstado() {
   if (!salaActiva) return;
+  asegurarSala();
+  if (!salaActiva.mqtt) return;
   try {
     salaActiva.mqtt.publicar(salaActiva.topico, {
       t: 'estado',
