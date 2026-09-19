@@ -483,6 +483,7 @@ function sumarPuntos() {
   state.entry = '0';
   save();
   render();
+  publicarEstado();
   revisarGanador();
 }
 
@@ -503,6 +504,8 @@ function revisarGanador() {
   document.body.classList.add('modal-open');
   save();
   render();
+  publicarEstado();
+  publicarGanador(t);
 }
 
 function aceptarGanador() {
@@ -522,6 +525,7 @@ function aceptarGanador() {
   state.entry = '0';
   save();
   render();
+  detenerSala();
   toast('Partida archivada en el historial 📜');
 }
 
@@ -543,11 +547,13 @@ function deshacerUltima() {
   SFX.deshacer();
   save();
   render();
+  publicarEstado();
   toast('Última mano deshecha');
 }
 
 function partidaNueva() {
   if (state.hands.length && !confirm('¿Empezar una partida nueva? Los puntajes actuales se reinician.')) return;
+  detenerSala(); // la sala anterior termina para los espectadores
   state.hands = [];
   state.teams[0].score = 0;
   state.teams[1].score = 0;
@@ -598,6 +604,7 @@ function editarNombre(i) {
     if (saveIt && v) state.teams[i].name = v;
     save();
     render();
+    publicarEstado();
   }
   input.addEventListener('keydown', function (ev) {
     if (ev.key === 'Enter') finish(true);
@@ -618,6 +625,7 @@ function cambiarColor(i) {
   SFX.key();
   save();
   renderCards();
+  publicarEstado();
 }
 
 function elegirMeta(m) {
@@ -630,6 +638,7 @@ function elegirMeta(m) {
   SFX.key();
   save();
   renderMeta();
+  publicarEstado();
 }
 
 /* ---------- Pullas ---------- */
@@ -678,6 +687,7 @@ function cerrarPullas() {
 function enviarPulla(fromTeam, pulla) {
   var other = 1 - fromTeam;
   cerrarPullas();
+  publicarPulla(fromTeam, pulla.id);
   var gRect = $('gift' + fromTeam).getBoundingClientRect();
   var cRect = $('card' + other).getBoundingClientRect();
   var el = document.createElement('div');
@@ -766,8 +776,392 @@ function toggleTheme() {
   render();
 }
 
+/* ===== MQTT-MINI puro: inicio ===== */
+/* Cliente MQTT 3.1.1 mínimo sobre WebSocket. Sin librerías externas.
+   Solo usa TextEncoder/Uint8Array: funciona en el navegador y en Node (pruebas). */
+var MQTT_BROKERS = [
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt'
+];
+var MQTT_TOPICO_BASE = 'cristo-domino/sala/';
+var CODIGO_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+function mqttEncodeUtf8(str) {
+  var bytes = new TextEncoder().encode(str);
+  var out = new Uint8Array(2 + bytes.length);
+  out[0] = (bytes.length >> 8) & 0xff;
+  out[1] = bytes.length & 0xff;
+  out.set(bytes, 2);
+  return out;
+}
+function mqttEncodeLongitud(n) {
+  var out = [];
+  do {
+    var b = n % 128;
+    n = Math.floor(n / 128);
+    if (n > 0) b |= 0x80;
+    out.push(b);
+  } while (n > 0);
+  return out;
+}
+function mqttPaquete(tipo, partes) {
+  var len = 0, i;
+  for (i = 0; i < partes.length; i++) len += partes[i].length;
+  var rl = mqttEncodeLongitud(len);
+  var out = new Uint8Array(1 + rl.length + len);
+  out[0] = tipo;
+  for (i = 0; i < rl.length; i++) out[1 + i] = rl[i];
+  var o = 1 + rl.length;
+  for (i = 0; i < partes.length; i++) { out.set(partes[i], o); o += partes[i].length; }
+  return out;
+}
+function mqttPaqueteConnect(clientId) {
+  // CONNECT: protocolo "MQTT" v4, clean session, keepalive 60s, sin usuario/clave
+  var vh = new Uint8Array([0x00, 0x04, 0x4d, 0x51, 0x54, 0x54, 0x04, 0x02, 0x00, 0x3c]);
+  return mqttPaquete(0x10, [vh, mqttEncodeUtf8(clientId)]);
+}
+function mqttPaqueteSubscribe(pid, topico) {
+  var id = new Uint8Array([(pid >> 8) & 0xff, pid & 0xff]);
+  return mqttPaquete(0x82, [id, mqttEncodeUtf8(topico), new Uint8Array([0x00])]);
+}
+function mqttPaquetePublish(topico, texto) {
+  return mqttPaquete(0x30, [mqttEncodeUtf8(topico), new TextEncoder().encode(texto)]);
+}
+function mqttLeerLongitud(buf, pos) {
+  var mult = 1, valor = 0, i = 0, b;
+  do {
+    b = buf[pos + i];
+    valor += (b & 127) * mult;
+    mult *= 128;
+    i++;
+    if (i > 4) return null;
+  } while ((b & 128) !== 0);
+  return { valor: valor, bytes: i };
+}
+function mqttExtraerPublicacion(buf) {
+  // Extrae un PUBLISH QoS 0 de un mensaje WebSocket binario. -> {topico, texto} | null
+  if (!buf || buf.length < 2 || (buf[0] & 0xf0) !== 0x30) return null;
+  var rl = mqttLeerLongitud(buf, 1);
+  if (!rl) return null;
+  var p = 1 + rl.bytes;
+  if (p + 2 > buf.length) return null;
+  var tl = (buf[p] << 8) | buf[p + 1];
+  p += 2;
+  if (p + tl > buf.length) return null;
+  var topico = new TextDecoder().decode(buf.slice(p, p + tl));
+  p += tl;
+  var texto = new TextDecoder().decode(buf.slice(p));
+  return { topico: topico, texto: texto };
+}
+function esConnackOk(buf) {
+  return !!buf && buf.length >= 4 && buf[0] === 0x20 && buf[1] === 0x02 && buf[2] === 0x00 && buf[3] === 0x00;
+}
+function generarCodigoSala() {
+  var c = '';
+  for (var i = 0; i < 6; i++) c += CODIGO_CHARS[(Math.random() * CODIGO_CHARS.length) | 0];
+  return c;
+}
+function codigoDeURL() {
+  try {
+    var m = new URLSearchParams(location.search).get('mirar');
+    if (m && /^[A-Za-z0-9]{6}$/.test(m)) return m.toUpperCase();
+  } catch (e) {}
+  return null;
+}
+function urlSala(codigo) {
+  var base = String(location.href).split('?')[0].split('#')[0];
+  return base + '?mirar=' + codigo;
+}
+/* ===== MQTT-MINI puro: fin ===== */
+
+/* Conexión MQTT: prueba los brokers en orden hasta que uno responda.
+   cbs = { abierto(cliente), mensaje(topico, obj), cerrado(motivo) }
+   cliente = { publicar(topico, obj), cerrar() } */
+function mqttConectar(topicoSub, cbs) {
+  var idx = 0, ws = null, pingTimer = null, cerradoVoluntario = false;
+  var cliente = {
+    publicar: function (topico, obj) {
+      if (ws && ws.readyState === 1) {
+        try { ws.send(mqttPaquetePublish(topico, JSON.stringify(obj))); } catch (e) {}
+      }
+    },
+    cerrar: function () {
+      cerradoVoluntario = true;
+      clearInterval(pingTimer);
+      try { if (ws) ws.close(); } catch (e) {}
+    }
+  };
+  function intentar() {
+    if (cerradoVoluntario) return;
+    if (idx >= MQTT_BROKERS.length) { cbs.cerrado('sin-broker'); return; }
+    var url = MQTT_BROKERS[idx++];
+    try { ws = new WebSocket(url, 'mqtt'); }
+    catch (e) { intentar(); return; }
+    ws.binaryType = 'arraybuffer';
+    var conecto = false;
+    var t = setTimeout(function () { try { ws.close(); } catch (e) {} }, 12000);
+    ws.onopen = function () {
+      try { ws.send(mqttPaqueteConnect('cd-' + Math.random().toString(36).slice(2, 10))); }
+      catch (e) { try { ws.close(); } catch (e2) {} }
+    };
+    ws.onmessage = function (ev) {
+      var buf = new Uint8Array(ev.data);
+      if (!conecto) {
+        if (esConnackOk(buf)) {
+          conecto = true;
+          clearTimeout(t);
+          try { if (topicoSub) ws.send(mqttPaqueteSubscribe(1, topicoSub)); } catch (e) {}
+          pingTimer = setInterval(function () {
+            try { ws.send(new Uint8Array([0xc0, 0x00])); } catch (e) {}
+          }, 45000);
+          cbs.abierto(cliente);
+        }
+        return;
+      }
+      var pub = mqttExtraerPublicacion(buf);
+      if (pub && cbs.mensaje) {
+        try { cbs.mensaje(pub.topico, JSON.parse(pub.texto)); } catch (e) {}
+      }
+    };
+    ws.onerror = function () { /* onclose se encarga */ };
+    ws.onclose = function () {
+      clearTimeout(t);
+      clearInterval(pingTimer);
+      if (cerradoVoluntario) return;
+      if (!conecto) intentar();
+      else cbs.cerrado('desconectado');
+    };
+  }
+  intentar();
+  return cliente;
+}
+
+/* ---------- Anfitrión: compartir partida ---------- */
+var salaActiva = null;     // {codigo, topico, mqtt, intentos}
+var salaPendiente = null;  // mientras conecta
+
+function cbsSala(registro) {
+  return {
+    abierto: function (cli) {
+      if (salaPendiente !== registro) { try { cli.cerrar(); } catch (e) {} return; }
+      salaPendiente = null;
+      salaActiva = registro;
+      var btn = $('shareBtn');
+      btn.textContent = '🟢 Compartiendo (detener)';
+      btn.classList.add('sharing');
+      publicarEstado();
+      var url = urlSala(registro.codigo);
+      var datos = { title: 'Cristo Domino en vivo', text: 'Mira nuestra partida de dominó en vivo', url: url };
+      if (navigator.share) {
+        navigator.share(datos).catch(function () {});
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () {
+          toast('Enlace copiado, compártelo con tus amigos 🔗');
+        }).catch(function () { toast('Comparte este enlace: ' + url); });
+      } else {
+        toast('Comparte este enlace: ' + url);
+      }
+    },
+    mensaje: function () {},
+    cerrado: function (motivo) {
+      if (salaPendiente === registro) {
+        salaPendiente = null;
+        if (motivo === 'sin-broker') toast('Sin conexión: no se pudo compartir la partida');
+        return;
+      }
+      if (salaActiva === registro) {
+        if (motivo === 'desconectado' && registro.intentos < 3) {
+          registro.intentos++;
+          setTimeout(function () {
+            if (salaActiva === registro) registro.mqtt = mqttConectar(null, cbsSala(registro));
+          }, 4000);
+        } else {
+          detenerSala();
+          toast('Se perdió la conexión para compartir');
+        }
+      }
+    }
+  };
+}
+
+function compartirPartida() {
+  if (salaActiva || salaPendiente) {
+    detenerSala();
+    toast('Dejaste de compartir la partida');
+    return;
+  }
+  ensureAudio();
+  var codigo = generarCodigoSala();
+  var registro = { codigo: codigo, topico: MQTT_TOPICO_BASE + codigo, mqtt: null, intentos: 0 };
+  salaPendiente = registro;
+  toast('Conectando para compartir…');
+  registro.mqtt = mqttConectar(null, cbsSala(registro));
+}
+
+function detenerSala() {
+  var reg = salaActiva || salaPendiente;
+  salaActiva = null;
+  salaPendiente = null;
+  if (reg) {
+    try { reg.mqtt.publicar(reg.topico, { t: 'fin' }); } catch (e) {}
+    try { reg.mqtt.cerrar(); } catch (e) {}
+  }
+  var btn = $('shareBtn');
+  if (btn) {
+    btn.textContent = '🔗 Compartir partida';
+    btn.classList.remove('sharing');
+  }
+}
+
+function publicarEstado() {
+  if (!salaActiva) return;
+  try {
+    salaActiva.mqtt.publicar(salaActiva.topico, {
+      t: 'estado',
+      v: 1,
+      meta: state.meta,
+      teams: [
+        { name: state.teams[0].name, color: state.teams[0].color, score: state.teams[0].score, dominadas: state.teams[0].dominadas },
+        { name: state.teams[1].name, color: state.teams[1].color, score: state.teams[1].score, dominadas: state.teams[1].dominadas }
+      ]
+    });
+  } catch (e) {}
+}
+function publicarPulla(fromTeam, pullaId) {
+  if (!salaActiva) return;
+  try { salaActiva.mqtt.publicar(salaActiva.topico, { t: 'pulla', id: pullaId, de: fromTeam }); } catch (e) {}
+}
+function publicarGanador(t) {
+  if (!salaActiva) return;
+  try {
+    salaActiva.mqtt.publicar(salaActiva.topico, { t: 'ganador', equipo: t, nombre: state.teams[t].name, meta: state.meta });
+  } catch (e) {}
+}
+
+/* ---------- Invitado: mirar partida ---------- */
+var MODO_ESPECTADOR = false;
+var codigoSalaInvitado = null;
+var mqttInvitado = null;
+var invitadoTimer = null;
+var invitadoEstado = false;
+var invitadoFin = false;
+
+function iniciarEspectador(codigo) {
+  MODO_ESPECTADOR = true;
+  codigoSalaInvitado = codigo;
+  document.body.classList.add('espectador');
+  document.title = 'Cristo Domino — partida en vivo';
+  $('spectBar').hidden = false;
+  $('spectWait').hidden = false;
+  renderTheme();
+  renderCards();
+  conectarInvitado();
+}
+
+function conectarInvitado() {
+  if (!MODO_ESPECTADOR || invitadoFin) return;
+  var topico = MQTT_TOPICO_BASE + codigoSalaInvitado;
+  try {
+    mqttInvitado = mqttConectar(topico, {
+      abierto: function () {
+        clearTimeout(invitadoTimer);
+        invitadoTimer = setTimeout(function () {
+          if (MODO_ESPECTADOR && !invitadoEstado && !invitadoFin) {
+            $('spectWait').textContent = 'No se encontró la partida. Revisa el enlace o pide uno nuevo…';
+          }
+        }, 25000);
+      },
+      mensaje: function (top, obj) {
+        if (top === topico) recibirMensajeInvitado(obj);
+      },
+      cerrado: function () {
+        if (!MODO_ESPECTADOR || invitadoFin) return;
+        clearTimeout(invitadoTimer);
+        invitadoTimer = setTimeout(conectarInvitado, 5000);
+      }
+    });
+  } catch (e) {
+    clearTimeout(invitadoTimer);
+    invitadoTimer = setTimeout(conectarInvitado, 8000);
+  }
+}
+
+function recibirMensajeInvitado(m) {
+  if (!m || typeof m.t !== 'string') return;
+  if (m.t === 'estado') {
+    invitadoEstado = true;
+    $('spectWait').hidden = true;
+    try {
+      for (var i = 0; i < 2; i++) {
+        var tm = m.teams[i] || {};
+        state.teams[i].name = String(tm.name || ('Equipo ' + (i + 1))).slice(0, 16);
+        state.teams[i].color = Math.abs(tm.color | 0) % TEAM_COLORS.length;
+        state.teams[i].score = Math.max(0, tm.score | 0);
+        state.teams[i].dominadas = Math.max(0, tm.dominadas | 0);
+      }
+      if (METAS.indexOf(m.meta) !== -1) state.meta = m.meta;
+    } catch (e) {}
+    renderCards();
+  } else if (m.t === 'pulla') {
+    var p = buscarPullaPorId(m.id);
+    if (p) enviarPulla(m.de === 1 ? 1 : 0, p);
+  } else if (m.t === 'ganador') {
+    celebrarGanadorInvitado(m);
+  } else if (m.t === 'fin') {
+    terminarInvitado('Partida terminada', 'Pide a tu amigo el enlace de la próxima partida 🙌');
+  }
+}
+
+function buscarPullaPorId(id) {
+  var grupos = ['basicas', 'epicas'];
+  for (var g = 0; g < grupos.length; g++) {
+    var arr = PULLAS[grupos[g]];
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i];
+  }
+  return null;
+}
+
+function celebrarGanadorInvitado(m) {
+  var idx = m.equipo === 1 ? 1 : 0;
+  var nombre = (m.nombre ? String(m.nombre).slice(0, 16) : state.teams[idx].name);
+  ensureAudio();
+  try { SFX.fanfarria(); } catch (e) {}
+  try { confetti(displayColor(state.teams[idx])); } catch (e) {}
+  $('spectWinTitle').textContent = '¡' + nombre + ' ganó la partida!';
+  $('spectWinSub').textContent = 'Meta ' + (m.meta || state.meta) + ' · ' + state.teams[idx].score + ' puntos';
+  $('spectWin').hidden = false;
+  setTimeout(function () {
+    terminarInvitado('Partida terminada', 'Pide a tu amigo el enlace de la próxima partida 🙌');
+  }, 6000);
+}
+
+function terminarInvitado(titulo, sub) {
+  invitadoFin = true;
+  clearTimeout(invitadoTimer);
+  try { if (mqttInvitado) mqttInvitado.cerrar(); } catch (e) {}
+  $('spectWait').hidden = true;
+  $('spectWinTitle').textContent = titulo;
+  $('spectWinSub').textContent = sub;
+  $('spectWin').hidden = false;
+}
+
 /* ---------- Eventos ---------- */
 function init() {
+  // Service worker (solo en http/https; en file:// no aplica)
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+
+  // Modo espectador: ?mirar=CODIGO — solo pizarra en vivo, sin controles
+  var codigo = codigoDeURL();
+  if (codigo) {
+    iniciarEspectador(codigo);
+    return;
+  }
+
   load();
   render();
 
@@ -807,6 +1201,7 @@ function init() {
 
   $('undoBtn').addEventListener('click', deshacerUltima);
   $('newGameBtn').addEventListener('click', partidaNueva);
+  $('shareBtn').addEventListener('click', compartirPartida);
   $('resetDomBtn').addEventListener('click', reiniciarDominadas);
   $('clearHistoryBtn').addEventListener('click', borrarHistorial);
   $('themeToggle').addEventListener('click', toggleTheme);
@@ -817,13 +1212,6 @@ function init() {
   });
 
   $('winnerOk').addEventListener('click', aceptarGanador);
-
-  // Service worker (solo en http/https; en file:// no aplica)
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
-    });
-  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

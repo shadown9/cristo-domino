@@ -439,6 +439,32 @@ details.arch summary::-webkit-details-marker{display:none;}
   width:100vw;height:100dvh;
 }
 
+/* ---------- Modo espectador ---------- */
+body.espectador .keypad,
+body.espectador .panel,
+body.espectador .meta-row,
+body.espectador .history,
+body.espectador #resetDomBtn,
+body.espectador .theme-toggle,
+body.espectador .target-hint{display:none;}
+body.espectador .score-card{cursor:default;}
+.spect-bar{
+  text-align:center;
+  color:var(--muted);
+  font-size:14px;font-weight:600;
+  margin:0 0 12px;
+}
+.spect-bar[hidden]{display:none;}
+.spect-wait{
+  text-align:center;
+  color:var(--accent);
+  font-size:15px;font-weight:600;
+  margin:20px 0 6px;
+  animation:giftGlow 2s ease-in-out infinite;
+}
+.spect-wait[hidden]{display:none;}
+#shareBtn.sharing{color:#34c77b;}
+
 /* ---------- Pantallas grandes ---------- */
 @media (min-width:560px){
   .header .logo{width:88px;height:88px;}

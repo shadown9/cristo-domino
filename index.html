@@ -24,6 +24,10 @@
 
 <main class="wrap">
 
+  <!-- Modo espectador -->
+  <div id="spectBar" class="spect-bar" hidden>👁️ Estás mirando la partida en vivo</div>
+  <div id="spectWait" class="spect-wait" hidden>Conectando con la partida…</div>
+
   <!-- Cuadros de puntaje -->
   <section class="scores" aria-label="Puntajes">
     <div class="score-card" data-team="0" id="card0">
@@ -88,6 +92,7 @@
       <div class="history-actions">
         <button id="newGameBtn" class="link-btn">Partida nueva</button>
         <button id="undoBtn" class="link-btn">Deshacer última</button>
+        <button id="shareBtn" class="link-btn">🔗 Compartir partida</button>
       </div>
     </div>
     <div id="historyBody"></div>
@@ -113,6 +118,15 @@
     <p id="winnerSub"></p>
     <p id="winnerUnlock" class="winner-unlock" hidden>¡Pullas épicas desbloqueadas! 🎆</p>
     <button class="sum-btn" id="winnerOk">Aceptar</button>
+  </div>
+</div>
+
+<!-- Aviso de ganador (espectador: sin botones) -->
+<div class="modal-backdrop" id="spectWin" hidden>
+  <div class="winner-card" role="alertdialog" aria-modal="true">
+    <div class="winner-emoji">🏆</div>
+    <h3 id="spectWinTitle">¡Ganó la partida!</h3>
+    <p id="spectWinSub"></p>
   </div>
 </div>
 
