@@ -138,6 +138,52 @@ function brassNote(freq, t0, dur, vol) {
   o.start(t0); lfo.start(t0);
   o.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
 }
+function trumpetStab(freq, t0, dur, vol) {
+  // Trompeta brillante y juguetona: onda cuadrada + pasa-altos + realce
+  // de brillo, ataque rapidísimo y corte staccato. Sin vibrato.
+  var o = AC.createOscillator(); o.type = 'square'; o.frequency.value = freq;
+  var hp = AC.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 900;
+  var pk = AC.createBiquadFilter();
+  pk.type = 'peaking'; pk.frequency.value = 2800; pk.Q.value = 0.9; pk.gain.value = 7;
+  var g = AC.createGain();
+  var v = vol || 0.35;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(v, t0 + 0.008);
+  g.gain.setValueAtTime(v, t0 + Math.max(0.009, dur - 0.03));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(hp); hp.connect(pk); pk.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function hornCall(freq, t0, dur, vol) {
+  // Llamada solemne de corno: sierra oscura (pasa-bajos bajo), ataque lento
+  // y majestuoso, sin vibrato.
+  var o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
+  var f = AC.createBiquadFilter();
+  f.type = 'lowpass'; f.frequency.value = 850; f.Q.value = 0.6;
+  var g = AC.createGain();
+  var v = vol || 0.5;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(v, t0 + 0.09);
+  g.gain.setValueAtTime(v, t0 + Math.max(0.091, dur - 0.14));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(f); f.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function timpano(t0, vol) {
+  // Timbal: caída de seno grave + golpe de ruido.
+  var v = vol || 0.5;
+  var o = AC.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(110, t0);
+  o.frequency.exponentialRampToValueAtTime(52, t0 + 0.26);
+  var g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(v, t0 + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + 0.4);
+  noiseHit(t0, 0.09, 'lowpass', 320, 0.7, v * 0.6);
+}
 function softNote(freq, t0, dur, type, vol) {
   var o = AC.createOscillator(); o.type = type || 'sine'; o.frequency.value = freq;
   var g = AC.createGain();
@@ -218,11 +264,14 @@ var PULLA_SFX = {
     }
   },
   corona: function () {
-    // Llamada real: Sol-Do-Mi-Sol sostenido
+    // Fanfarria real solemne: línea ascendente majestuosa de corno + timbales.
+    // Carácter totalmente distinto a la trompeta juguetona.
     if (!AC) return;
     var t = AC.currentTime + 0.02;
-    [[392, 0, 0.14], [523, 0.15, 0.14], [659, 0.30, 0.14], [784, 0.45, 0.55]]
-      .forEach(function (n) { brassNote(n[0], t + n[1], n[2], 0.42); });
+    [[261.6, 0, 0.38], [349.2, 0.42, 0.38], [440, 0.84, 0.38], [587.3, 1.26, 1.15]]
+      .forEach(function (n) { hornCall(n[0], t + n[1], n[2], 0.5); });
+    [0, 0.42, 0.84].forEach(function (dt) { timpano(t + dt, 0.4); });
+    timpano(t + 1.26, 0.55);
   },
   rayo: function () {
     // Relámpago: zumbido eléctrico descendente + chasquido
@@ -247,12 +296,12 @@ var PULLA_SFX = {
       .forEach(function (n) { softNote(n[0], t + n[1], 0.34, 'sine', 0.42); });
   },
   trompeta: function () {
-    // Trompeta de verdad: ta-ta-taaa con vibrato
+    // Trompeta brillante y juguetona: ta-ta-taaa staccato en octava alta.
     if (!AC) return;
     var t = AC.currentTime + 0.02;
-    brassNote(523, t, 0.13, 0.45);
-    brassNote(523, t + 0.15, 0.13, 0.45);
-    brassNote(784, t + 0.30, 0.55, 0.48);
+    trumpetStab(1046.5, t, 0.11, 0.34);
+    trumpetStab(1318.5, t + 0.135, 0.11, 0.34);
+    trumpetStab(1568, t + 0.27, 0.5, 0.36);
   },
   estrella: function () {
     // Destello: glissando ascendente + tintineos
@@ -709,6 +758,25 @@ function enviarPulla(fromTeam, pulla) {
   };
 }
 
+/* Risa humana real grabada (CC0: "laughter-male_029-030 037-042" de Gerent,
+   Freesound). Si el archivo no carga, se usa la síntesis anterior en silencio. */
+var risaAudio = null;
+function reproducirRisaReal() {
+  try {
+    if (!risaAudio) {
+      risaAudio = new Audio('audio/risa.mp3');
+      risaAudio.preload = 'auto';
+    }
+    risaAudio.currentTime = 0;
+    var p = risaAudio.play();
+    if (p && p.catch) {
+      p.catch(function () { if (PULLA_SFX.risa) PULLA_SFX.risa(); });
+    }
+  } catch (e) {
+    if (PULLA_SFX.risa) PULLA_SFX.risa();
+  }
+}
+
 function mostrarPullaGrande(pulla) {
   ensureAudio();
   var el = document.createElement('div');
@@ -716,7 +784,8 @@ function mostrarPullaGrande(pulla) {
   el.innerHTML = '<div class="pb-emoji">' + pulla.emoji + '</div>' +
                  '<div class="pb-title">' + esc(pulla.titulo) + '</div>';
   document.body.appendChild(el);
-  if (PULLA_SFX[pulla.sonido]) PULLA_SFX[pulla.sonido]();
+  if (pulla.sonido === 'risa') reproducirRisaReal();
+  else if (PULLA_SFX[pulla.sonido]) PULLA_SFX[pulla.sonido]();
   else if (pulla.melodia) melody(pulla.melodia);
   requestAnimationFrame(function () { el.classList.add('show'); });
   setTimeout(function () {

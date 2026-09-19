@@ -1,11 +1,13 @@
 /* Cristo Domino — Service Worker. App shell cacheado para uso sin conexión. */
-var CACHE = 'cristo-domino-v4';
+var CACHE = 'cristo-domino-v5';
 var ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.json',
+  './audio/risa.mp3',
+  './audio/risa.ogg',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-192.png',

@@ -73,6 +73,13 @@ body.modal-open{overflow:hidden;}
   border-radius:18px;
   box-shadow:var(--shadow);
 }
+/* En tema claro el símbolo plateado se lava sobre el fondo blanco:
+   baldosa azul marino detrás para darle contraste (mismo tamaño). */
+body.light .header .logo{
+  background:#16294d;
+  padding:7px;
+  box-sizing:border-box;
+}
 .header h1{
   margin:12px 0 6px;
   font-size:27px;
