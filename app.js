@@ -660,11 +660,13 @@ function deshacerUltima() {
 }
 
 function partidaNueva() {
-  if (state.hands.length && !confirm('¿Empezar una partida nueva? Los puntajes actuales se reinician.')) return;
+  if (state.hands.length && !confirm('¿Empezar una partida nueva? Los puntajes y las dominadas se reinician.')) return;
   detenerSala(); // la sala anterior termina para los espectadores
   state.hands = [];
   state.teams[0].score = 0;
   state.teams[1].score = 0;
+  state.teams[0].dominadas = 0;
+  state.teams[1].dominadas = 0;
   state.entry = '0';
   save();
   render();
