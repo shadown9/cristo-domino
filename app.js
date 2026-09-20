@@ -1295,7 +1295,7 @@ function conectarInvitado() {
 function recibirMensajeInvitado(m, inicial) {
   if (!m || typeof m.t !== 'string') return;
   if (m.t === 'estado') {
-    var ts = m.ts | 0;
+    var ts = Number(m.ts) || 0;
     if (ts && Date.now() - ts > 2 * 3600 * 1000) return; // estado retenido muy viejo: sala muerta
     invitadoEstado = true;
     $('spectWait').hidden = true;
@@ -1318,7 +1318,7 @@ function recibirMensajeInvitado(m, inicial) {
     var p = buscarPullaPorId(m.id);
     if (p) enviarPulla(m.de === 1 ? 1 : 0, p);
   } else if (m.t === 'ganador') {
-    var gts = m.ts | 0;
+    var gts = Number(m.ts) || 0;
     if (gts <= invitadoGanadorTs) return;
     invitadoGanadorTs = gts;
     if (inicial) return; // sincronización inicial: no re-celebrar
