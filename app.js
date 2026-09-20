@@ -941,7 +941,7 @@ function toggleTheme() {
      cbs = { abierto(cli), mensaje(tipo, obj, inicial), cerrado(motivo) }
      cliente = { publicar(tipo, obj, critico), cerrar(), vivo() }
    Datos bajo /salas/<CODIGO>/{estado,pulla,ganador,fin}. */
-var NUBE_DB_URL = 'https://TU-PROYECTO-default-rtdb.firebaseio.com'; // ← se configura al activar
+var NUBE_DB_URL = 'https://cristo-domino-default-rtdb.firebaseio.com'; // base de datos de Deivy
 
 var CODIGO_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 var NUBE_TIPOS = ['estado', 'pulla', 'ganador', 'fin'];
