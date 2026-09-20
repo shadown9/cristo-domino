@@ -1191,12 +1191,24 @@ document.addEventListener('visibilitychange', function () {
   if (!document.hidden) asegurarSala();
 });
 
+/* Borra la sala de la nube al dejar de compartir: las salas son diminutas,
+   pero así no se acumulan en la base de datos. Solo capa de compartir. */
+function nubeBorrarSala(codigo) {
+  try {
+    var base = nubeBase();
+    if (!/^https:\/\//.test(base) || !codigo) return;
+    fetch(base + '/salas/' + codigo + '.json', { method: 'DELETE', keepalive: true }).catch(function () {});
+  } catch (e) {}
+}
+
 function detenerSala() {  var reg = salaActiva || salaPendiente;
   salaActiva = null;
   salaPendiente = null;
   if (reg) {
     try { reg.nube.publicar('fin', { t: 'fin', ts: Date.now() }); } catch (e) {}
     try { reg.nube.cerrar(); } catch (e) {}
+    var codSala = reg.codigo;
+    setTimeout(function () { nubeBorrarSala(codSala); }, 2000); // tras avisar el fin, borra la sala
   }
   var btn = $('shareBtn');
   if (btn) {
